@@ -460,7 +460,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         }
       }
 
-      // Auto-bite
+      // Auto-bite — damage = 10% of weight
       if (now - store.lastBiteTime > BITE_COOLDOWN_MS) {
         let nearest: { key: string; dist: number; name: string } | null = null;
         store.remotePlayers.forEach((p, key) => {
@@ -473,15 +473,18 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         if (nearest && supabase) {
           store.lastBiteTime = now;
           const n = nearest as { key: string; dist: number; name: string };
+          const biteDamage = Math.max(1, Math.round(store.weight * 0.1));
           supabase.channel(`bites-${n.key}`).send({
             type: 'broadcast',
             event: 'bite',
-            payload: { attackerName: store.name, damage: BITE_DAMAGE },
+            payload: { attackerName: store.name, damage: biteDamage },
           });
-          toast(`🦷 Bit ${n.name}!`);
+          // Gain weight equal to bite damage
+          store.weight += biteDamage;
+          toast(`🦷 Bit ${n.name}! (-${biteDamage} HP)`);
           // Check if they died (optimistic kill count)
           const victim = store.remotePlayers.get(n.key);
-          if (victim && victim.hp - BITE_DAMAGE <= 0) {
+          if (victim && victim.hp - biteDamage <= 0) {
             store.kills++;
           }
         }
