@@ -42,6 +42,7 @@ export function createGameStore(): GameStore {
     lastBiteTime: 0,
     flashUntil: 0,
     spectate: false,
+    spawnTime: 0,
   };
 }
 
