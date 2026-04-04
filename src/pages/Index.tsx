@@ -10,11 +10,13 @@ export default function Index() {
   const [phase, setPhase] = useState<GamePhase>('entry');
   const [killerName, setKillerName] = useState('');
   const [finalKills, setFinalKills] = useState(0);
+  const [finalSurvival, setFinalSurvival] = useState(0);
 
   const handleEnter = useCallback((name: string) => {
     const store = getStore();
     store.name = name;
     store.phase = 'playing';
+    store.spawnTime = Date.now();
     setPhase('playing');
   }, []);
 
@@ -32,6 +34,7 @@ export default function Index() {
       if (store.phase === 'dead' && phase !== 'dead') {
         setKillerName(store.killerName);
         setFinalKills(store.kills);
+        setFinalSurvival(store.spawnTime > 0 ? Math.floor((Date.now() - store.spawnTime) / 1000) : 0);
         setPhase('dead');
       }
     }, 200);
@@ -51,6 +54,7 @@ export default function Index() {
         <DeathScreen
           killerName={killerName}
           kills={finalKills}
+          survivalTime={finalSurvival}
           onSpectate={handleSpectate}
         />
       )}

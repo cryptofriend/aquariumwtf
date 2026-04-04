@@ -95,6 +95,12 @@ export default function GameUI() {
   const store = getStore();
   const hpPct = Math.max(0, store.hp / MAX_HP) * 100;
 
+  // Survival timer
+  const elapsed = store.spawnTime > 0 ? Math.floor((Date.now() - store.spawnTime) / 1000) : 0;
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  const timerStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
   // Build leaderboard
   const entries: { name: string; kills: number; hp: number; dead: boolean }[] = [];
   if (!store.spectate) {
@@ -121,11 +127,17 @@ export default function GameUI() {
         {entries.length === 0 && <div className="text-zinc-600 text-xs">No players yet</div>}
       </div>
 
-      {/* Kill counter */}
+      {/* Kill counter + Survival timer */}
       {!store.spectate && (
-        <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg px-4 py-2">
-          <span className="text-red-400 text-2xl font-bold">{store.kills}</span>
-          <span className="text-zinc-500 text-xs ml-1">kills</span>
+        <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
+          <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg px-4 py-2">
+            <span className="text-red-400 text-2xl font-bold">{store.kills}</span>
+            <span className="text-zinc-500 text-xs ml-1">kills</span>
+          </div>
+          <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg px-4 py-2">
+            <span className="text-cyan-400 text-2xl font-bold">{timerStr}</span>
+            <span className="text-zinc-500 text-xs ml-1">survived</span>
+          </div>
         </div>
       )}
 
