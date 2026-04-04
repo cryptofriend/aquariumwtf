@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   TANK_HALF, DAMPING, MAX_SPEED, MOUSE_LERP, BITE_RANGE,
   BITE_COOLDOWN_MS, BROADCAST_MS, FOOD_SPAWN_MS, REMOTE_LERP,
-  DEATH_DELAY_MS, uid, INITIAL_WEIGHT, FOOD_WEIGHT
+  DEATH_DELAY_MS, uid, INITIAL_WEIGHT, FOOD_WEIGHT, BITE_IMMUNITY_MS
 } from '../game/constants';
 import { FoodOrb, PlayerState } from '../game/types';
 import { addFoodIfMissing, createRandomFoodOrb, getSharedKelpPositions, removeFoodById, replaceFoods } from '../game/sharedWorld';
