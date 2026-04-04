@@ -1,4 +1,4 @@
-import { useRef, useMemo, useEffect, useCallback } from 'react';
+import { useRef, useMemo, useEffect, useCallback, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import * as THREE from 'three';
@@ -13,6 +13,16 @@ import { PlayerState } from '../game/types';
 import { toast } from 'sonner';
 
 const tmpVec = new THREE.Vector3();
+const PROXIMITY_RANGE = 10; // Show distance labels within this range
+
+interface EatingOrb {
+  id: string;
+  x: number;
+  y: number;
+  z: number;
+  startTime: number;
+  duration: number;
+}
 
 // Fish mesh component
 function FishMesh({ color, opacity = 1 }: { color: string; opacity?: number }) {
