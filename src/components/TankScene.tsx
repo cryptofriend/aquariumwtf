@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   TANK_HALF, DAMPING, MAX_SPEED, MOUSE_LERP, BITE_RANGE,
   BITE_COOLDOWN_MS, BROADCAST_MS, FOOD_SPAWN_MS, REMOTE_LERP,
-  DEATH_DELAY_MS, uid, INITIAL_WEIGHT, FOOD_WEIGHT, BITE_IMMUNITY_MS
+  DEATH_DELAY_MS, uid, INITIAL_WEIGHT, FOOD_WEIGHT
 } from '../game/constants';
 import { FoodOrb, PlayerState } from '../game/types';
 import { addFoodIfMissing, createRandomFoodOrb, getSharedKelpPositions, removeFoodById, replaceFoods } from '../game/sharedWorld';
@@ -402,17 +402,11 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         console.log('[Aquarium] Bite event received:', JSON.stringify(payload), 'myUid:', uid);
         if (!payload || payload.targetId !== uid) return;
         if (store.dead) return;
-        const now = Date.now();
-        if (now < store.immuneUntil) {
-          console.log('[Aquarium] Bite IGNORED — immune for', Math.round((store.immuneUntil - now) / 1000), 'more seconds');
-          return;
-        }
         const biteAmount = payload.damage || 0.1;
         store.weight = Math.round(Math.max(0, store.weight - biteAmount) * 100) / 100;
         console.log('[Aquarium] Weight reduced to:', store.weight);
-        store.flashUntil = now + 300;
-        store.immuneUntil = now + BITE_IMMUNITY_MS;
-        toast.error(`Bitten by ${payload.attackerName}! -${biteAmount.toFixed(1)}kg — immune for 15min`);
+        store.flashUntil = Date.now() + 300;
+        toast.error(`Bitten by ${payload.attackerName}! -${biteAmount.toFixed(1)}kg`);
 
         if (store.weight <= 0 && !store.dead) {
           store.dead = true;
