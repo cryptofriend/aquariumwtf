@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getStore } from '../game/useGameStore';
-import { MAX_HP } from '../game/constants';
+import { MAX_HP, TANK_HALF } from '../game/constants';
 import { PlayerState } from '../game/types';
 
 function hpColor(hp: number) {
@@ -8,6 +8,80 @@ function hpColor(hp: number) {
   if (pct > 0.55) return '#22c55e';
   if (pct > 0.3) return '#eab308';
   return '#ef4444';
+}
+
+function Minimap() {
+  const store = getStore();
+  const mapW = 160;
+  const mapH = 120;
+
+  // Map 3D coords to 2D minimap (top-down: x → x, z → y)
+  const toMap = (x: number, z: number) => ({
+    mx: ((x + TANK_HALF.x) / (TANK_HALF.x * 2)) * mapW,
+    my: ((z + TANK_HALF.z) / (TANK_HALF.z * 2)) * mapH,
+  });
+
+  const dots: { mx: number; my: number; color: string; name: string; isPlayer: boolean; dead: boolean }[] = [];
+
+  // Local player
+  if (!store.spectate) {
+    const { mx, my } = toMap(store.position.x, store.position.z);
+    dots.push({ mx, my, color: store.color, name: store.name, isPlayer: true, dead: store.dead });
+  }
+
+  // Remote players
+  store.remotePlayers.forEach((p) => {
+    const { mx, my } = toMap(p.x, p.z);
+    dots.push({ mx, my, color: p.color, name: p.name, isPlayer: false, dead: p.dead });
+  });
+
+  return (
+    <div className="absolute bottom-4 right-4 pointer-events-auto">
+      <div className="bg-black/70 backdrop-blur-sm border border-zinc-700 rounded-lg p-2">
+        <div className="text-zinc-500 text-[9px] uppercase tracking-wider mb-1 text-center font-bold">Radar</div>
+        <div
+          className="relative border border-zinc-700/50 rounded"
+          style={{ width: mapW, height: mapH, background: 'rgba(5,5,16,0.8)' }}
+        >
+          {/* Grid lines */}
+          <svg className="absolute inset-0 w-full h-full opacity-20" viewBox={`0 0 ${mapW} ${mapH}`}>
+            <line x1={mapW / 2} y1={0} x2={mapW / 2} y2={mapH} stroke="#444" strokeWidth={0.5} />
+            <line x1={0} y1={mapH / 2} x2={mapW} y2={mapH / 2} stroke="#444" strokeWidth={0.5} />
+            <rect x={1} y={1} width={mapW - 2} height={mapH - 2} fill="none" stroke="#555" strokeWidth={0.5} />
+          </svg>
+
+          {/* Fish dots */}
+          {dots.map((d, i) => (
+            <div
+              key={i}
+              className="absolute"
+              style={{
+                left: d.mx - (d.isPlayer ? 5 : 3),
+                top: d.my - (d.isPlayer ? 5 : 3),
+                width: d.isPlayer ? 10 : 6,
+                height: d.isPlayer ? 10 : 6,
+              }}
+            >
+              <div
+                className="w-full h-full rounded-full"
+                style={{
+                  backgroundColor: d.dead ? '#666' : d.color,
+                  opacity: d.dead ? 0.4 : 1,
+                  boxShadow: d.isPlayer ? `0 0 6px ${d.color}` : 'none',
+                  border: d.isPlayer ? '1px solid rgba(255,255,255,0.6)' : 'none',
+                }}
+              />
+              {d.isPlayer && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 text-[7px] text-white whitespace-nowrap font-bold">
+                  YOU
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function GameUI() {
@@ -67,6 +141,9 @@ export default function GameUI() {
           <div className="text-center text-zinc-500 text-xs mt-1">{store.hp} / {MAX_HP}</div>
         </div>
       )}
+
+      {/* Minimap / Radar */}
+      <Minimap />
 
       {/* Controls hint */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-zinc-600 text-xs text-center">
