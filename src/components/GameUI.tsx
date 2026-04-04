@@ -162,10 +162,10 @@ export default function GameUI() {
 
   return (
     <div className="fixed inset-0 z-40 pointer-events-none font-mono">
-      {/* Leaderboard */}
-      <div className="absolute top-4 left-4 pointer-events-auto bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg p-3 min-w-[180px]">
-        <div className="text-purple-400 text-xs font-bold mb-2 uppercase tracking-wider">Leaderboard</div>
-        {entries.slice(0, 8).map((e, i) => (
+      {/* Live Players */}
+      <div className="absolute top-4 left-4 pointer-events-auto bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg p-3 min-w-[200px]">
+        <div className="text-purple-400 text-xs font-bold mb-2 uppercase tracking-wider">🔴 Live Players</div>
+        {liveEntries.slice(0, 8).map((e, i) => (
           <div key={i} className={`flex items-center gap-2 text-xs py-0.5 ${e.dead ? 'opacity-40 line-through' : ''}`}>
             <span className="text-zinc-400 w-4">{i + 1}</span>
             <span className="text-zinc-200 truncate flex-1">{e.name}</span>
@@ -173,7 +173,22 @@ export default function GameUI() {
             <span className="text-zinc-500">{e.hp}</span>
           </div>
         ))}
-        {entries.length === 0 && <div className="text-zinc-600 text-xs">No players yet</div>}
+        {liveEntries.length === 0 && <div className="text-zinc-600 text-xs">No players yet</div>}
+
+        {/* Best Runs */}
+        {topScores.length > 0 && (
+          <>
+            <div className="text-amber-400 text-xs font-bold mt-3 mb-1 uppercase tracking-wider border-t border-zinc-700 pt-2">🏆 Best Runs</div>
+            {topScores.map((s, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs py-0.5">
+                <span className="text-zinc-400 w-4">{i + 1}</span>
+                <span className="text-zinc-200 truncate flex-1">{s.player_name}</span>
+                <span className="text-cyan-400">{formatTime(s.survival_seconds)}</span>
+                <span className="text-red-400">{s.kills}🗡</span>
+              </div>
+            ))}
+          </>
+        )}
       </div>
 
       {/* Kill counter + Survival timer */}
