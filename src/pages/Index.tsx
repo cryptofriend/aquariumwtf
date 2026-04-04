@@ -54,6 +54,7 @@ export default function Index() {
         <DeathScreen
           killerName={killerName}
           kills={finalKills}
+          survivalTime={finalSurvival}
           onSpectate={handleSpectate}
         />
       )}

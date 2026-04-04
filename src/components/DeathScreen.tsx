@@ -19,8 +19,11 @@ export default function DeathScreen({ killerName, kills, survivalTime, onSpectat
           by <span className="text-red-300 font-bold">{killerName}</span>
         </p>
       )}
-      <p className="text-zinc-500 font-mono text-sm mb-8">
+      <p className="text-zinc-500 font-mono text-sm mb-2">
         Final kills: <span className="text-zinc-300 font-bold">{kills}</span>
+      </p>
+      <p className="text-zinc-500 font-mono text-sm mb-8">
+        Survived: <span className="text-cyan-400 font-bold">{timerStr}</span>
       </p>
       <button
         onClick={onSpectate}
