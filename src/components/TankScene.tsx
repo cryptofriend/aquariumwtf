@@ -667,14 +667,13 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
             startTime: Date.now(),
             duration: 400,
           }]);
-          store.hp = Math.min(MAX_HP, store.hp + FOOD_HP);
-          store.weight += FOOD_WEIGHT;
+          store.weight = Math.round((store.weight + FOOD_WEIGHT) * 100) / 100;
           void channelRef.current?.send({
             type: 'broadcast',
             event: 'food-eaten',
             payload: { foodId: f.id } satisfies FoodEatenPayload,
           });
-          toast.success(`+${FOOD_HP} HP, +${FOOD_WEIGHT} weight 🍔`);
+          toast.success(`+${FOOD_WEIGHT}kg 🌿`);
         }
       }
 
