@@ -1,9 +1,6 @@
-export const MAX_HP = 100;
 export const BITE_RANGE = 3.2;
 export const BITE_COOLDOWN_MS = 1200;
-export const BITE_DAMAGE = 0.1; // 10% of attacker weight
-export const FOOD_HP = 0; // food no longer heals
-export const FOOD_WEIGHT = 1; // food gives +1kg
+export const FOOD_WEIGHT = 1;
 export const FOOD_SPAWN_MS = 3500;
 export const MAX_FOOD = 14;
 export const BROADCAST_MS = 60;

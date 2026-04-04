@@ -12,7 +12,7 @@ export default function Index() {
   const [phase, setPhase] = useState<GamePhase>('entry');
   const [killerName, setKillerName] = useState('');
   const [finalKills, setFinalKills] = useState(0);
-  const [finalWeight, setFinalWeight] = useState(100);
+  const [finalWeight, setFinalWeight] = useState(1);
 
   const handleEnter = useCallback((name: string) => {
     const store = getStore();
@@ -34,7 +34,6 @@ export default function Index() {
     setPhase('entry');
   }, []);
 
-  // Poll for death phase change from game loop
   useEffect(() => {
     const id = setInterval(() => {
       const store = getStore();

@@ -4,10 +4,9 @@ export interface PlayerState {
   x: number;
   y: number;
   z: number;
-  hp: number;
+  weight: number;
   kills: number;
   dead: boolean;
-  weight: number;
 }
 
 export interface FoodOrb {

@@ -15,7 +15,6 @@ function mulberry32(seed: number) {
 
 export function getSharedKelpPositions(): [number, number, number][] {
   const random = mulberry32(WORLD_SEED);
-
   return Array.from({ length: KELP_COUNT }, () => [
     (random() - 0.5) * TANK_HALF.x * 1.6,
     0,
@@ -33,25 +32,19 @@ export function createRandomFoodOrb(): FoodOrb {
 }
 
 export function addFoodIfMissing(food: FoodOrb[], orb: FoodOrb): boolean {
-  if (food.some((entry) => entry.id === orb.id) || food.length >= MAX_FOOD) {
-    return false;
-  }
-
+  if (food.some((e) => e.id === orb.id) || food.length >= MAX_FOOD) return false;
   food.push(orb);
   return true;
 }
 
 export function replaceFoods(target: FoodOrb[], next: FoodOrb[]) {
-  const deduped = next.filter((orb, index) => next.findIndex((entry) => entry.id === orb.id) === index);
+  const deduped = next.filter((o, i) => next.findIndex((e) => e.id === o.id) === i);
   target.splice(0, target.length, ...deduped.slice(0, MAX_FOOD));
 }
 
 export function removeFoodById(food: FoodOrb[], foodId: string): boolean {
-  const index = food.findIndex((entry) => entry.id === foodId);
-  if (index === -1) {
-    return false;
-  }
-
-  food.splice(index, 1);
+  const idx = food.findIndex((e) => e.id === foodId);
+  if (idx === -1) return false;
+  food.splice(idx, 1);
   return true;
 }
