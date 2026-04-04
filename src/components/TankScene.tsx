@@ -504,7 +504,8 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
           }]);
           store.food.splice(i, 1);
           store.hp = Math.min(MAX_HP, store.hp + FOOD_HP);
-          toast.success(`+${FOOD_HP} HP 🍔`);
+          store.weight += FOOD_WEIGHT;
+          toast.success(`+${FOOD_HP} HP, +${FOOD_WEIGHT} weight 🍔`);
         }
       }
 
