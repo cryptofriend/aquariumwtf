@@ -448,37 +448,8 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
 
     channelRef.current = channel;
 
-    // Bite channel
-    const biteChannel = supabase.channel(`bites-${uid}`);
-    biteChannel
-      .on('broadcast', { event: 'bite' }, ({ payload }) => {
-        if (store.dead) return;
-        const now = Date.now();
-        if (now < store.immuneUntil) return; // immune, ignore bite
-        const biteAmount = payload.damage || 0.1;
-        store.weight = Math.round(Math.max(0, store.weight - biteAmount) * 100) / 100;
-        store.flashUntil = now + 300;
-        store.immuneUntil = now + BITE_IMMUNITY_MS;
-        toast.error(`Bitten by ${payload.attackerName}! -${biteAmount.toFixed(1)}kg — immune for 15min`);
 
-        if (store.weight <= 0 && !store.dead) {
-          store.dead = true;
-          store.killerName = payload.attackerName || 'Unknown';
-          const survivalSecs = store.spawnTime > 0 ? Math.floor((Date.now() - store.spawnTime) / 1000) : 0;
-          supabase.from('leaderboard').insert({
-            player_name: store.name,
-            survival_seconds: survivalSecs,
-            kills: store.kills,
-            weight: store.weight,
-          } as any).then(({ error }) => {
-            if (error) console.error('[Aquarium] Failed to save score:', error);
-          });
-          deathTimeout.current = window.setTimeout(() => { store.phase = 'dead'; }, DEATH_DELAY_MS);
-        }
-      })
-      .subscribe();
 
-    biteChannelRef.current = biteChannel;
 
     const handleBeforeUnload = () => {
       if (!store.dead && store.spawnTime > 0 && store.name) {
