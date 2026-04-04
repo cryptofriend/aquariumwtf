@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   TANK_HALF, DAMPING, MAX_SPEED, MOUSE_LERP, BITE_RANGE,
   BITE_COOLDOWN_MS, BITE_DAMAGE, FOOD_HP, MAX_HP, BROADCAST_MS,
-  FOOD_SPAWN_MS, REMOTE_LERP, DEATH_DELAY_MS, uid
+  FOOD_SPAWN_MS, REMOTE_LERP, DEATH_DELAY_MS, uid, INITIAL_WEIGHT, FOOD_WEIGHT
 } from '../game/constants';
 import { PlayerState } from '../game/types';
 import { toast } from 'sonner';
