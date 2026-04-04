@@ -335,7 +335,10 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         toast(`🐟 ${joinName} joined the tank!`, { duration: 3000 });
         console.log('[Aquarium] Player joined:', key, newPresences);
       })
-      .on('presence', { event: 'leave' }, ({ key }) => {
+      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+        const p = (leftPresences as any[])?.[0];
+        const leaveName = p?.name || 'A fish';
+        toast(`💨 ${leaveName} left the tank`, { duration: 3000 });
         console.log('[Aquarium] Player left:', key);
         store.remotePlayers.delete(key);
       })
