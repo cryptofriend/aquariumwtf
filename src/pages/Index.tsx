@@ -34,6 +34,7 @@ export default function Index() {
       if (store.phase === 'dead' && phase !== 'dead') {
         setKillerName(store.killerName);
         setFinalKills(store.kills);
+        setFinalSurvival(store.spawnTime > 0 ? Math.floor((Date.now() - store.spawnTime) / 1000) : 0);
         setPhase('dead');
       }
     }, 200);
