@@ -535,10 +535,10 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
           store.lastBiteTime = now;
           const n = nearest as { key: string; dist: number; name: string };
           const biteAmount = Math.max(0.1, store.weight * 0.1);
-          supabase.channel(`bites-${n.key}`).send({
+          void channelRef.current?.send({
             type: 'broadcast',
             event: 'bite',
-            payload: { attackerName: store.name, damage: biteAmount },
+            payload: { targetId: n.key, attackerName: store.name, damage: biteAmount },
           });
           store.weight = Math.round((store.weight + biteAmount) * 100) / 100;
           toast(`🦷 Bit ${n.name}! (+${biteAmount.toFixed(1)}kg)`);
