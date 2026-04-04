@@ -321,7 +321,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
   useEffect(() => {
     const store = getStore();
     const channel = supabase.channel('aquarium-live', {
-      config: { presence: { key: uid }, broadcast: { self: false, ack: true } },
+      config: { presence: { key: uid }, broadcast: { self: true, ack: true } },
     });
 
     const resolveHost = () => {
