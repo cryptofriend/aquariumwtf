@@ -399,6 +399,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         if (e?.foodId) consumeFood(e.foodId);
       })
       .on('broadcast', { event: 'bite' }, ({ payload }) => {
+        console.log('[Aquarium] Bite event received:', JSON.stringify(payload), 'myUid:', uid);
         if (!payload || payload.targetId !== uid) return;
         if (store.dead) return;
         const now = Date.now();
@@ -535,6 +536,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
           store.lastBiteTime = now;
           const n = nearest as { key: string; dist: number; name: string };
           const biteAmount = Math.max(0.1, store.weight * 0.1);
+          console.log('[Aquarium] Sending bite to targetId:', n.key, 'damage:', biteAmount);
           void channelRef.current?.send({
             type: 'broadcast',
             event: 'bite',
