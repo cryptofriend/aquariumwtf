@@ -286,7 +286,13 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
 
   // Keyboard
   useEffect(() => {
-    const down = (e: KeyboardEvent) => keys.current.add(e.key.toLowerCase());
+    const down = (e: KeyboardEvent) => {
+      keys.current.add(e.key.toLowerCase());
+      if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        biteRequest.pending = true;
+      }
+    };
     const up = (e: KeyboardEvent) => keys.current.delete(e.key.toLowerCase());
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
