@@ -585,6 +585,20 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       {Array.from(store.remotePlayers.entries()).map(([key, p]) => (
         <RemoteFish key={key} id={key} player={p} />
       ))}
+
+      {/* Distance labels */}
+      {!spectate && !store.dead && proximities.map((p) => (
+        <DistanceLabel key={p.id} targetPos={p.pos} distance={p.dist} />
+      ))}
+
+      {/* Eating food animations */}
+      {eatingOrbs.map((orb) => (
+        <EatingFoodOrb
+          key={orb.id}
+          orb={orb}
+          onComplete={() => setEatingOrbs(prev => prev.filter(o => o.id !== orb.id))}
+        />
+      ))}
     </>
   );
 }
