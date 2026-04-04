@@ -397,6 +397,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
           player_name: store.name,
           survival_seconds: survivalSecs,
           kills: store.kills,
+          weight: store.weight,
         });
         navigator.sendBeacon(
           `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/leaderboard`,
