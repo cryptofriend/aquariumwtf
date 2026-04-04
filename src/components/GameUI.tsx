@@ -195,16 +195,16 @@ export default function GameUI() {
         </div>
       )}
 
-      {/* HP bar */}
+      {/* Weight bar (replacing HP bar) */}
       {!store.spectate && (
         <div className="absolute bottom-16 left-1/2 -translate-x-1/2 w-64">
           <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-full h-5 overflow-hidden">
             <div
-              className="h-full rounded-full transition-all duration-200"
-              style={{ width: `${hpPct}%`, backgroundColor: hpColor(store.hp) }}
+              className="h-full rounded-full transition-all duration-200 bg-amber-500"
+              style={{ width: `${Math.min(100, (store.weight / Math.max(store.weight, 10)) * 100)}%` }}
             />
           </div>
-          <div className="text-center text-zinc-500 text-xs mt-1">{store.hp} / {MAX_HP}</div>
+          <div className="text-center text-zinc-500 text-xs mt-1">{weightDisplay} kg</div>
         </div>
       )}
 
