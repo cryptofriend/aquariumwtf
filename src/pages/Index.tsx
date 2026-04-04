@@ -10,6 +10,7 @@ export default function Index() {
   const [phase, setPhase] = useState<GamePhase>('entry');
   const [killerName, setKillerName] = useState('');
   const [finalKills, setFinalKills] = useState(0);
+  const [finalSurvival, setFinalSurvival] = useState(0);
 
   const handleEnter = useCallback((name: string) => {
     const store = getStore();
