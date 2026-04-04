@@ -287,33 +287,51 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
 
   // Supabase channels
   useEffect(() => {
-    if (!supabase) return;
     const store = getStore();
+    console.log('[Aquarium] Setting up realtime channel, uid:', uid, 'name:', store.name);
 
-    const channel = supabase.channel('aquarium', {
+    const channel = supabase.channel('aquarium-live', {
       config: { presence: { key: uid } },
     });
 
     channel
       .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState<PlayerState>();
+        const state = channel.presenceState();
         const currentIds = new Set<string>();
         Object.entries(state).forEach(([key, presences]) => {
           if (key === uid) return;
           currentIds.add(key);
-          const p = presences[0] as unknown as PlayerState;
+          const p = (presences as any[])[0];
           if (p) {
-            store.remotePlayers.set(key, { ...p });
+            store.remotePlayers.set(key, {
+              name: p.name,
+              color: p.color,
+              x: p.x,
+              y: p.y,
+              z: p.z,
+              hp: p.hp,
+              kills: p.kills,
+              dead: p.dead,
+            });
           }
         });
         // Remove departed
         store.remotePlayers.forEach((_, key) => {
           if (!currentIds.has(key)) store.remotePlayers.delete(key);
         });
+        console.log('[Aquarium] Presence sync — remote players:', store.remotePlayers.size, 'total keys:', Object.keys(state).length);
       })
-      .subscribe(async (status) => {
+      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+        console.log('[Aquarium] Player joined:', key, newPresences);
+      })
+      .on('presence', { event: 'leave' }, ({ key }) => {
+        console.log('[Aquarium] Player left:', key);
+        store.remotePlayers.delete(key);
+      })
+      .subscribe(async (status, err) => {
+        console.log('[Aquarium] Channel status:', status, err || '');
         if (status === 'SUBSCRIBED') {
-          await channel.track({
+          const trackResult = await channel.track({
             name: store.name,
             color: store.color,
             x: store.position.x,
@@ -322,7 +340,8 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
             hp: store.hp,
             kills: store.kills,
             dead: store.dead,
-          } as PlayerState);
+          });
+          console.log('[Aquarium] Track result:', trackResult);
         }
       });
 
@@ -340,6 +359,16 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         if (store.hp <= 0 && !store.dead) {
           store.dead = true;
           store.killerName = payload.attackerName || 'Unknown';
+          // Save score to leaderboard
+          const survivalSecs = store.spawnTime > 0 ? Math.floor((Date.now() - store.spawnTime) / 1000) : 0;
+          supabase.from('leaderboard').insert({
+            player_name: store.name,
+            survival_seconds: survivalSecs,
+            kills: store.kills,
+          } as any).then(({ error }) => {
+            if (error) console.error('[Aquarium] Failed to save score:', error);
+            else console.log('[Aquarium] Score saved:', survivalSecs, 's');
+          });
           // Death delay
           deathTimeout.current = window.setTimeout(() => {
             store.phase = 'dead';
@@ -350,9 +379,29 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
 
     biteChannelRef.current = biteChannel;
 
+    // Save score on page leave
+    const handleBeforeUnload = () => {
+      if (!store.dead && store.spawnTime > 0 && store.name) {
+        const survivalSecs = Math.floor((Date.now() - store.spawnTime) / 1000);
+        // Use sendBeacon for reliability
+        const payload = JSON.stringify({
+          player_name: store.name,
+          survival_seconds: survivalSecs,
+          kills: store.kills,
+        });
+        navigator.sendBeacon(
+          `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/leaderboard`,
+          new Blob([payload], { type: 'application/json' })
+        );
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
+      console.log('[Aquarium] Cleaning up channels');
       channel.unsubscribe();
       biteChannel.unsubscribe();
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       if (deathTimeout.current) clearTimeout(deathTimeout.current);
     };
   }, []);

@@ -27,6 +27,11 @@ export default function Index() {
     setPhase('spectate');
   }, []);
 
+  const handlePlayAgain = useCallback(() => {
+    resetStore();
+    setPhase('entry');
+  }, []);
+
   // Poll for death phase change from game loop
   useEffect(() => {
     const id = setInterval(() => {
@@ -56,6 +61,7 @@ export default function Index() {
           kills={finalKills}
           survivalTime={finalSurvival}
           onSpectate={handleSpectate}
+          onPlayAgain={handlePlayAgain}
         />
       )}
     </>
