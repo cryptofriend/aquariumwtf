@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import EntryScreen from '../components/EntryScreen';
 import DeathScreen from '../components/DeathScreen';
 import GameUI from '../components/GameUI';
