@@ -26,7 +26,7 @@ export default function Index() {
   }, []);
 
   // Poll for death phase change from game loop
-  useState(() => {
+  useEffect(() => {
     const id = setInterval(() => {
       const store = getStore();
       if (store.phase === 'dead' && phase !== 'dead') {
@@ -36,7 +36,7 @@ export default function Index() {
       }
     }, 200);
     return () => clearInterval(id);
-  });
+  }, [phase]);
 
   return (
     <>
