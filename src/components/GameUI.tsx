@@ -3,6 +3,7 @@ import { getStore } from '../game/useGameStore';
 import { TANK_HALF, BITE_COOLDOWN_MS } from '../game/constants';
 import { supabase } from '@/integrations/supabase/client';
 import { biteRequest } from './TankScene';
+import { Move } from 'lucide-react';
 
 function Minimap() {
   const store = getStore();
@@ -173,11 +174,15 @@ export default function GameUI() {
 
       <Minimap />
 
-      {/* Bite button */}
+      {/* Bite + Nav controls */}
       {!store.spectate && !store.dead && (
-        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 pointer-events-auto">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 pointer-events-auto flex items-center gap-3">
+          <div className="bg-black/50 backdrop-blur-sm border border-zinc-700 rounded-lg p-2 flex items-center gap-1">
+            <Move size={16} className="text-zinc-400" />
+            <span className="text-zinc-500 text-[10px]">WASD</span>
+          </div>
           <button
-            className={`px-6 py-3 rounded-lg font-bold text-lg transition-all ${
+            className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${
               Date.now() - store.lastBiteTime > BITE_COOLDOWN_MS
                 ? 'bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-900/50 active:scale-95'
                 : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
@@ -186,13 +191,8 @@ export default function GameUI() {
           >
             🦷 BITE
           </button>
-          <div className="text-zinc-600 text-[10px] text-center mt-1">or SPACE</div>
         </div>
       )}
-
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-zinc-600 text-xs text-center">
-        WASD move · Q/E up/down · Mouse attract · SPACE bite
-      </div>
     </div>
   );
 }
