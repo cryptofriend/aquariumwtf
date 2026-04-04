@@ -54,33 +54,56 @@ function Minimap() {
           </svg>
 
           {/* Fish dots */}
-          {dots.map((d, i) => (
+          {dots.map((d, i) => {
+            // Dot size scales with depth (higher = bigger)
+            const baseSize = d.isPlayer ? 8 : 5;
+            const size = baseSize + d.depth * 4;
+            return (
+              <div
+                key={i}
+                className="absolute"
+                style={{
+                  left: d.mx - size / 2,
+                  top: d.my - size / 2,
+                  width: size,
+                  height: size,
+                }}
+              >
+                <div
+                  className="w-full h-full rounded-full"
+                  style={{
+                    backgroundColor: d.dead ? '#666' : d.color,
+                    opacity: d.dead ? 0.4 : (0.5 + d.depth * 0.5),
+                    boxShadow: d.isPlayer ? `0 0 6px ${d.color}` : 'none',
+                    border: d.isPlayer ? '1px solid rgba(255,255,255,0.6)' : 'none',
+                  }}
+                />
+                {d.isPlayer && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 text-[7px] text-white whitespace-nowrap font-bold">
+                    YOU
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Depth scale bar */}
+          <div className="absolute -right-5 top-0 bottom-0 w-3 flex flex-col items-center justify-between">
+            <div className="text-[6px] text-zinc-500">⬆</div>
             <div
-              key={i}
-              className="absolute"
-              style={{
-                left: d.mx - (d.isPlayer ? 5 : 3),
-                top: d.my - (d.isPlayer ? 5 : 3),
-                width: d.isPlayer ? 10 : 6,
-                height: d.isPlayer ? 10 : 6,
-              }}
+              className="w-1.5 flex-1 rounded-full mx-auto my-0.5 overflow-hidden"
+              style={{ background: 'rgba(255,255,255,0.08)' }}
             >
               <div
-                className="w-full h-full rounded-full"
+                className="w-full rounded-full transition-all duration-200"
                 style={{
-                  backgroundColor: d.dead ? '#666' : d.color,
-                  opacity: d.dead ? 0.4 : 1,
-                  boxShadow: d.isPlayer ? `0 0 6px ${d.color}` : 'none',
-                  border: d.isPlayer ? '1px solid rgba(255,255,255,0.6)' : 'none',
+                  height: `${(1 - (dots.find(d => d.isPlayer)?.depth ?? 0.5)) * 100}%`,
+                  background: 'rgba(100,200,255,0.4)',
                 }}
               />
-              {d.isPlayer && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 text-[7px] text-white whitespace-nowrap font-bold">
-                  YOU
-                </div>
-              )}
             </div>
-          ))}
+            <div className="text-[6px] text-zinc-500">⬇</div>
+          </div>
         </div>
       </div>
     </div>
