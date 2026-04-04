@@ -469,7 +469,6 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
 
     return () => {
       channel.unsubscribe();
-      biteChannel.unsubscribe();
       window.removeEventListener('beforeunload', handleBeforeUnload);
       if (deathTimeout.current) clearTimeout(deathTimeout.current);
     };
