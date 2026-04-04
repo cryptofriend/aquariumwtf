@@ -4,11 +4,6 @@ import { MAX_HP, TANK_HALF } from '../game/constants';
 import { PlayerState } from '../game/types';
 import { supabase } from '@/integrations/supabase/client';
 
-function formatTime(s: number) {
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-}
 
 function hpColor(hp: number) {
   const pct = hp / MAX_HP;
@@ -119,7 +114,7 @@ function Minimap() {
 
 export default function GameUI() {
   const [, setTick] = useState(0);
-  const [topScores, setTopScores] = useState<{ player_name: string; survival_seconds: number; kills: number }[]>([]);
+  const [topScores, setTopScores] = useState<{ player_name: string; weight: number; kills: number }[]>([]);
 
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 200);
@@ -131,8 +126,8 @@ export default function GameUI() {
     const fetchScores = async () => {
       const { data } = await supabase
         .from('leaderboard')
-        .select('player_name, survival_seconds, kills')
-        .order('survival_seconds', { ascending: false })
+        .select('player_name, weight, kills')
+        .order('weight', { ascending: false })
         .limit(5);
       if (data) setTopScores(data as any);
     };
@@ -144,21 +139,15 @@ export default function GameUI() {
   const store = getStore();
   const hpPct = Math.max(0, store.hp / MAX_HP) * 100;
 
-  // Survival timer
-  const elapsed = store.spawnTime > 0 ? Math.floor((Date.now() - store.spawnTime) / 1000) : 0;
-  const mins = Math.floor(elapsed / 60);
-  const secs = elapsed % 60;
-  const timerStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-
-  // Build live player list
-  const liveEntries: { name: string; kills: number; hp: number; dead: boolean }[] = [];
+  // Build live player list — sorted by weight
+  const liveEntries: { name: string; kills: number; hp: number; dead: boolean; weight: number }[] = [];
   if (!store.spectate) {
-    liveEntries.push({ name: store.name, kills: store.kills, hp: store.hp, dead: store.dead });
+    liveEntries.push({ name: store.name, kills: store.kills, hp: store.hp, dead: store.dead, weight: store.weight });
   }
   store.remotePlayers.forEach(p => {
-    liveEntries.push({ name: p.name, kills: p.kills, hp: p.hp, dead: p.dead });
+    liveEntries.push({ name: p.name, kills: p.kills, hp: p.hp, dead: p.dead, weight: p.weight });
   });
-  liveEntries.sort((a, b) => b.kills - a.kills);
+  liveEntries.sort((a, b) => b.weight - a.weight);
 
   return (
     <div className="fixed inset-0 z-40 pointer-events-none font-mono">
@@ -169,8 +158,8 @@ export default function GameUI() {
           <div key={i} className={`flex items-center gap-2 text-xs py-0.5 ${e.dead ? 'opacity-40 line-through' : ''}`}>
             <span className="text-zinc-400 w-4">{i + 1}</span>
             <span className="text-zinc-200 truncate flex-1">{e.name}</span>
+            <span className="text-amber-400">{e.weight}kg</span>
             <span className="text-red-400">{e.kills}🗡</span>
-            <span className="text-zinc-500">{e.hp}</span>
           </div>
         ))}
         {liveEntries.length === 0 && <div className="text-zinc-600 text-xs">No players yet</div>}
@@ -183,7 +172,7 @@ export default function GameUI() {
               <div key={i} className="flex items-center gap-2 text-xs py-0.5">
                 <span className="text-zinc-400 w-4">{i + 1}</span>
                 <span className="text-zinc-200 truncate flex-1">{s.player_name}</span>
-                <span className="text-cyan-400">{formatTime(s.survival_seconds)}</span>
+                <span className="text-amber-400">{s.weight}kg</span>
                 <span className="text-red-400">{s.kills}🗡</span>
               </div>
             ))}
@@ -197,10 +186,6 @@ export default function GameUI() {
           <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg px-4 py-2">
             <span className="text-red-400 text-2xl font-bold">{store.kills}</span>
             <span className="text-zinc-500 text-xs ml-1">kills</span>
-          </div>
-          <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg px-4 py-2">
-            <span className="text-cyan-400 text-2xl font-bold">{timerStr}</span>
-            <span className="text-zinc-500 text-xs ml-1">survived</span>
           </div>
           <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg px-4 py-2">
             <span className="text-amber-400 text-xl font-bold">{store.weight}</span>

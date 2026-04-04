@@ -4,25 +4,19 @@ import { supabase } from '@/integrations/supabase/client';
 interface Props {
   killerName: string;
   kills: number;
-  survivalTime: number;
+  weight: number;
   onSpectate: () => void;
   onPlayAgain: () => void;
 }
 
-function formatTime(s: number) {
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-}
-
-export default function DeathScreen({ killerName, kills, survivalTime, onSpectate, onPlayAgain }: Props) {
-  const [topScores, setTopScores] = useState<{ player_name: string; survival_seconds: number; kills: number }[]>([]);
+export default function DeathScreen({ killerName, kills, weight, onSpectate, onPlayAgain }: Props) {
+  const [topScores, setTopScores] = useState<{ player_name: string; weight: number; kills: number }[]>([]);
 
   useEffect(() => {
     supabase
       .from('leaderboard')
-      .select('player_name, survival_seconds, kills')
-      .order('survival_seconds', { ascending: false })
+      .select('player_name, weight, kills')
+      .order('weight', { ascending: false })
       .limit(10)
       .then(({ data }) => {
         if (data) setTopScores(data as any);
@@ -43,18 +37,18 @@ export default function DeathScreen({ killerName, kills, survivalTime, onSpectat
         Final kills: <span className="text-zinc-300 font-bold">{kills}</span>
       </p>
       <p className="text-zinc-500 font-mono text-sm mb-6">
-        Survived: <span className="text-cyan-400 font-bold">{formatTime(survivalTime)}</span>
+        Final weight: <span className="text-amber-400 font-bold">{weight}kg</span>
       </p>
 
       {/* Best Runs */}
       {topScores.length > 0 && (
         <div className="bg-black/40 border border-zinc-700 rounded-lg p-4 mb-6 min-w-[280px]">
-          <div className="text-amber-400 text-xs font-mono font-bold mb-2 uppercase tracking-wider text-center">🏆 Best Runs</div>
+          <div className="text-amber-400 text-xs font-mono font-bold mb-2 uppercase tracking-wider text-center">🏆 Heaviest Fish</div>
           {topScores.map((s, i) => (
             <div key={i} className="flex items-center gap-2 text-xs font-mono py-0.5">
               <span className="text-zinc-400 w-4">{i + 1}</span>
               <span className="text-zinc-200 truncate flex-1">{s.player_name}</span>
-              <span className="text-cyan-400">{formatTime(s.survival_seconds)}</span>
+              <span className="text-amber-400">{s.weight}kg</span>
               <span className="text-red-400">{s.kills}🗡</span>
             </div>
           ))}
