@@ -399,6 +399,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         if (e?.foodId) consumeFood(e.foodId);
       })
       .on('broadcast', { event: 'bite' }, ({ payload }) => {
+        console.log('[Aquarium] Bite event received:', JSON.stringify(payload), 'myUid:', uid);
         if (!payload || payload.targetId !== uid) return;
         if (store.dead) return;
         const now = Date.now();
