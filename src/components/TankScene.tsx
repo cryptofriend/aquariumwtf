@@ -635,10 +635,10 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       {/* Player fish */}
       {!spectate && (
         <group ref={playerRef} position={[store.position.x, store.position.y, store.position.z]}>
-          <FishMesh color={store.color} />
+          <FishMesh color={store.color} weight={store.weight} />
           <HPBar hp={store.hp} maxHp={MAX_HP} />
-          <Text position={[0, 2.3, 0]} fontSize={0.6} color="#ffffff" anchorX="center" anchorY="middle" font={undefined}>
-            {store.name}
+          <Text position={[0, 2.3, 0]} fontSize={0.5} color="#ffffff" anchorX="center" anchorY="middle" font={undefined}>
+            {store.name} ({store.weight}kg)
           </Text>
         </group>
       )}
