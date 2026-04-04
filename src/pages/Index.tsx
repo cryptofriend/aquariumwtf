@@ -59,7 +59,7 @@ export default function Index() {
         <DeathScreen
           killerName={killerName}
           kills={finalKills}
-          survivalTime={finalSurvival}
+          weight={finalWeight}
           onSpectate={handleSpectate}
           onPlayAgain={handlePlayAgain}
         />
