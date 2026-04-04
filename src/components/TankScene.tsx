@@ -680,10 +680,10 @@ function RemoteFish({ id, player }: { id: string; player: PlayerState }) {
 
   return (
     <group ref={ref} position={[player.x, player.y, player.z]}>
-      <FishMesh color={player.dead ? '#666666' : player.color} opacity={player.dead ? 0.45 : 1} />
+      <FishMesh color={player.dead ? '#666666' : player.color} opacity={player.dead ? 0.45 : 1} weight={player.weight} />
       {!player.dead && <HPBar hp={player.hp} maxHp={MAX_HP} />}
-      <Text position={[0, 2.3, 0]} fontSize={0.6} color={player.dead ? '#666666' : '#ffffff'} anchorX="center" anchorY="middle" font={undefined}>
-        {player.name}
+      <Text position={[0, 2.3, 0]} fontSize={0.5} color={player.dead ? '#666666' : '#ffffff'} anchorX="center" anchorY="middle" font={undefined}>
+        {player.name} ({player.weight}kg)
       </Text>
     </group>
   );
