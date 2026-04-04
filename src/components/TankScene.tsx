@@ -3,7 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { getStore, spawnFood } from '../game/useGameStore';
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import {
   TANK_HALF, DAMPING, MAX_SPEED, MOUSE_LERP, BITE_RANGE,
   BITE_COOLDOWN_MS, BITE_DAMAGE, FOOD_HP, MAX_HP, BROADCAST_MS,
