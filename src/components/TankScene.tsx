@@ -540,10 +540,12 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
           const rawBite = Math.max(0.1, store.weight * 0.1);
           const biteAmount = Math.min(rawBite, victimWeight); // can't take more than victim has
           console.log('[Aquarium] Sending bite to targetId:', n.key, 'damage:', biteAmount, 'victimWeight:', victimWeight);
-          void channelRef.current?.send({
+          channelRef.current?.send({
             type: 'broadcast',
             event: 'bite',
             payload: { targetId: n.key, attackerName: store.name, damage: biteAmount },
+          }).then((status: string) => {
+            console.log('[Aquarium] Bite send status:', status);
           });
           store.weight = Math.round((store.weight + biteAmount) * 100) / 100;
           toast(`🦷 Bit ${n.name}! (+${biteAmount.toFixed(1)}kg)`);
