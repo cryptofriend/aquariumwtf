@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { getStore } from '../game/useGameStore';
-import { TANK_HALF } from '../game/constants';
+import { TANK_HALF, BITE_COOLDOWN_MS } from '../game/constants';
 import { supabase } from '@/integrations/supabase/client';
+import { biteRequest } from './TankScene';
 
 function Minimap() {
   const store = getStore();
