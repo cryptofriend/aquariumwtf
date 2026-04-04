@@ -191,6 +191,10 @@ export default function GameUI() {
           >
             🦷 BITE
           </button>
+          <div className="bg-black/50 backdrop-blur-sm border border-zinc-700 rounded-lg p-2 flex items-center gap-1">
+            <ArrowUpDown size={16} className="text-zinc-400" />
+            <span className="text-zinc-500 text-[10px]">Q/E</span>
+          </div>
         </div>
       )}
     </div>
