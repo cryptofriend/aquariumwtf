@@ -1,7 +1,7 @@
 import { useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { PlayerState, FoodOrb, GamePhase } from './types';
-import { MAX_HP, FISH_COLORS, uid, TANK_HALF, MAX_FOOD } from './constants';
+import { MAX_HP, FISH_COLORS, uid, TANK_HALF, MAX_FOOD, INITIAL_WEIGHT } from './constants';
 
 // Simple global mutable store (no re-renders needed for frame-level data)
 export interface GameStore {
