@@ -11,6 +11,7 @@ import {
 } from '../game/constants';
 import { FoodOrb, PlayerState } from '../game/types';
 import { addFoodIfMissing, createRandomFoodOrb, getSharedKelpPositions, removeFoodById, replaceFoods } from '../game/sharedWorld';
+import { joystickState } from './VirtualJoystick';
 import { toast } from 'sonner';
 
 const tmpVec = new THREE.Vector3();
