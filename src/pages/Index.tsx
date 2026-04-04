@@ -48,6 +48,8 @@ export default function Index() {
     return () => clearInterval(id);
   }, [phase]);
 
+  const isMobile = useIsMobile();
+
   return (
     <>
       {phase === 'entry' && <EntryScreen onEnter={handleEnter} />}
@@ -55,6 +57,7 @@ export default function Index() {
         <>
           <Tank3D spectate={phase === 'spectate'} />
           <GameUI />
+          {isMobile && phase === 'playing' && <VirtualJoystick />}
         </>
       )}
       {phase === 'dead' && (
