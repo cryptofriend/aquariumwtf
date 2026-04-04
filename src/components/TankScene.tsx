@@ -7,7 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   TANK_HALF, DAMPING, MAX_SPEED, MOUSE_LERP, BITE_RANGE,
   BITE_COOLDOWN_MS, BITE_DAMAGE, FOOD_HP, MAX_HP, BROADCAST_MS,
-  FOOD_SPAWN_MS, REMOTE_LERP, DEATH_DELAY_MS, uid
+  FOOD_SPAWN_MS, REMOTE_LERP, DEATH_DELAY_MS, uid, INITIAL_WEIGHT, FOOD_WEIGHT
 } from '../game/constants';
 import { PlayerState } from '../game/types';
 import { toast } from 'sonner';
@@ -24,10 +24,16 @@ interface EatingOrb {
   duration: number;
 }
 
+// Scale factor from weight (base weight = INITIAL_WEIGHT → scale 1.0)
+function weightToScale(weight: number): number {
+  return 0.7 + (weight / INITIAL_WEIGHT) * 0.3; // starts at 1.0, grows ~30% per 100 weight
+}
+
 // Fish mesh component
-function FishMesh({ color, opacity = 1 }: { color: string; opacity?: number }) {
+function FishMesh({ color, opacity = 1, weight = INITIAL_WEIGHT }: { color: string; opacity?: number; weight?: number }) {
+  const scale = weightToScale(weight);
   return (
-    <group>
+    <group scale={[scale, scale, scale]}>
       {/* Body */}
       <mesh scale={[1.2, 0.7, 0.6]}>
         <sphereGeometry args={[1, 12, 8]} />
@@ -312,6 +318,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
               hp: p.hp,
               kills: p.kills,
               dead: p.dead,
+              weight: p.weight ?? INITIAL_WEIGHT,
             });
           }
         });
@@ -340,6 +347,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
             hp: store.hp,
             kills: store.kills,
             dead: store.dead,
+            weight: store.weight,
           });
           console.log('[Aquarium] Track result:', trackResult);
         }
@@ -458,7 +466,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         }
       }
 
-      // Auto-bite
+      // Auto-bite — damage = 10% of weight
       if (now - store.lastBiteTime > BITE_COOLDOWN_MS) {
         let nearest: { key: string; dist: number; name: string } | null = null;
         store.remotePlayers.forEach((p, key) => {
@@ -471,15 +479,18 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         if (nearest && supabase) {
           store.lastBiteTime = now;
           const n = nearest as { key: string; dist: number; name: string };
+          const biteDamage = Math.max(1, Math.round(store.weight * 0.1));
           supabase.channel(`bites-${n.key}`).send({
             type: 'broadcast',
             event: 'bite',
-            payload: { attackerName: store.name, damage: BITE_DAMAGE },
+            payload: { attackerName: store.name, damage: biteDamage },
           });
-          toast(`🦷 Bit ${n.name}!`);
+          // Gain weight equal to bite damage
+          store.weight += biteDamage;
+          toast(`🦷 Bit ${n.name}! (-${biteDamage} HP)`);
           // Check if they died (optimistic kill count)
           const victim = store.remotePlayers.get(n.key);
-          if (victim && victim.hp - BITE_DAMAGE <= 0) {
+          if (victim && victim.hp - biteDamage <= 0) {
             store.kills++;
           }
         }
@@ -499,7 +510,8 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
           }]);
           store.food.splice(i, 1);
           store.hp = Math.min(MAX_HP, store.hp + FOOD_HP);
-          toast.success(`+${FOOD_HP} HP 🍔`);
+          store.weight += FOOD_WEIGHT;
+          toast.success(`+${FOOD_HP} HP, +${FOOD_WEIGHT} weight 🍔`);
         }
       }
 
@@ -545,6 +557,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
           hp: store.hp,
           kills: store.kills,
           dead: store.dead,
+          weight: store.weight,
         });
       }
     }
@@ -622,10 +635,10 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       {/* Player fish */}
       {!spectate && (
         <group ref={playerRef} position={[store.position.x, store.position.y, store.position.z]}>
-          <FishMesh color={store.color} />
+          <FishMesh color={store.color} weight={store.weight} />
           <HPBar hp={store.hp} maxHp={MAX_HP} />
-          <Text position={[0, 2.3, 0]} fontSize={0.6} color="#ffffff" anchorX="center" anchorY="middle" font={undefined}>
-            {store.name}
+          <Text position={[0, 2.3, 0]} fontSize={0.5} color="#ffffff" anchorX="center" anchorY="middle" font={undefined}>
+            {store.name} ({store.weight}kg)
           </Text>
         </group>
       )}
@@ -667,10 +680,10 @@ function RemoteFish({ id, player }: { id: string; player: PlayerState }) {
 
   return (
     <group ref={ref} position={[player.x, player.y, player.z]}>
-      <FishMesh color={player.dead ? '#666666' : player.color} opacity={player.dead ? 0.45 : 1} />
+      <FishMesh color={player.dead ? '#666666' : player.color} opacity={player.dead ? 0.45 : 1} weight={player.weight} />
       {!player.dead && <HPBar hp={player.hp} maxHp={MAX_HP} />}
-      <Text position={[0, 2.3, 0]} fontSize={0.6} color={player.dead ? '#666666' : '#ffffff'} anchorX="center" anchorY="middle" font={undefined}>
-        {player.name}
+      <Text position={[0, 2.3, 0]} fontSize={0.5} color={player.dead ? '#666666' : '#ffffff'} anchorX="center" anchorY="middle" font={undefined}>
+        {player.name} ({player.weight}kg)
       </Text>
     </group>
   );
