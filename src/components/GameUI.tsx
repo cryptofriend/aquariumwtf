@@ -137,7 +137,7 @@ export default function GameUI() {
   }, []);
 
   const store = getStore();
-  const hpPct = Math.max(0, store.hp / MAX_HP) * 100;
+  const weightDisplay = store.weight.toFixed(1);
 
   // Build live player list — sorted by weight
   const liveEntries: { name: string; kills: number; hp: number; dead: boolean; weight: number }[] = [];
@@ -188,23 +188,23 @@ export default function GameUI() {
             <span className="text-zinc-500 text-xs ml-1">kills</span>
           </div>
           <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg px-4 py-2">
-            <span className="text-amber-400 text-xl font-bold">{store.weight}</span>
+            <span className="text-amber-400 text-xl font-bold">{weightDisplay}</span>
             <span className="text-zinc-500 text-xs ml-1">kg</span>
-            <span className="text-zinc-600 text-[10px] ml-2">bite: {Math.max(1, Math.round(store.weight * 0.1))}</span>
+            <span className="text-zinc-600 text-[10px] ml-2">bite: {(store.weight * 0.1).toFixed(1)}kg</span>
           </div>
         </div>
       )}
 
-      {/* HP bar */}
+      {/* Weight bar (replacing HP bar) */}
       {!store.spectate && (
         <div className="absolute bottom-16 left-1/2 -translate-x-1/2 w-64">
           <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-full h-5 overflow-hidden">
             <div
-              className="h-full rounded-full transition-all duration-200"
-              style={{ width: `${hpPct}%`, backgroundColor: hpColor(store.hp) }}
+              className="h-full rounded-full transition-all duration-200 bg-amber-500"
+              style={{ width: `${Math.min(100, (store.weight / Math.max(store.weight, 10)) * 100)}%` }}
             />
           </div>
-          <div className="text-center text-zinc-500 text-xs mt-1">{store.hp} / {MAX_HP}</div>
+          <div className="text-center text-zinc-500 text-xs mt-1">{weightDisplay} kg</div>
         </div>
       )}
 

@@ -47,9 +47,9 @@ interface FoodEatenPayload {
   foodId: string;
 }
 
-// Scale factor from weight (base weight = INITIAL_WEIGHT → scale 1.0)
+// Scale factor from weight (base weight = 1kg → scale 1.0, grows logarithmically)
 function weightToScale(weight: number): number {
-  return 0.7 + (weight / INITIAL_WEIGHT) * 0.3; // starts at 1.0, grows ~30% per 100 weight
+  return 0.6 + Math.log2(Math.max(1, weight)) * 0.25;
 }
 
 // Fish mesh component
@@ -507,11 +507,13 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
     biteChannel
       .on('broadcast', { event: 'bite' }, ({ payload }) => {
         if (store.dead) return;
-        store.hp = Math.max(0, store.hp - (payload.damage || BITE_DAMAGE));
+        const biteAmount = payload.damage || 0.1;
+        // Lose weight from being bitten
+        store.weight = Math.round(Math.max(0, store.weight - biteAmount) * 100) / 100;
         store.flashUntil = Date.now() + 300;
-        toast.error(`Bitten by ${payload.attackerName}! -${payload.damage} HP`);
+        toast.error(`Bitten by ${payload.attackerName}! -${biteAmount.toFixed(1)}kg`);
 
-        if (store.hp <= 0 && !store.dead) {
+        if (store.weight <= 0 && !store.dead) {
           store.dead = true;
           store.killerName = payload.attackerName || 'Unknown';
           // Save score to leaderboard
@@ -624,7 +626,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         }
       }
 
-      // Auto-bite — damage = 10% of weight
+      // Auto-bite — transfer 10% of attacker's weight from victim
       if (now - store.lastBiteTime > BITE_COOLDOWN_MS) {
         let nearest: { key: string; dist: number; name: string } | null = null;
         store.remotePlayers.forEach((p, key) => {
@@ -637,18 +639,18 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         if (nearest && supabase) {
           store.lastBiteTime = now;
           const n = nearest as { key: string; dist: number; name: string };
-          const biteDamage = Math.max(1, Math.round(store.weight * 0.1));
+          const biteAmount = Math.max(0.1, store.weight * 0.1);
           supabase.channel(`bites-${n.key}`).send({
             type: 'broadcast',
             event: 'bite',
-            payload: { attackerName: store.name, damage: biteDamage },
+            payload: { attackerName: store.name, damage: biteAmount },
           });
-          // Gain weight equal to bite damage
-          store.weight += biteDamage;
-          toast(`🦷 Bit ${n.name}! (-${biteDamage} HP)`);
-          // Check if they died (optimistic kill count)
+          // Gain weight from bite
+          store.weight = Math.round((store.weight + biteAmount) * 100) / 100;
+          toast(`🦷 Bit ${n.name}! (+${biteAmount.toFixed(1)}kg)`);
+          // Check if they died (weight <= 0)
           const victim = store.remotePlayers.get(n.key);
-          if (victim && victim.hp - biteDamage <= 0) {
+          if (victim && victim.weight - biteAmount <= 0) {
             store.kills++;
           }
         }
@@ -665,14 +667,13 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
             startTime: Date.now(),
             duration: 400,
           }]);
-          store.hp = Math.min(MAX_HP, store.hp + FOOD_HP);
-          store.weight += FOOD_WEIGHT;
+          store.weight = Math.round((store.weight + FOOD_WEIGHT) * 100) / 100;
           void channelRef.current?.send({
             type: 'broadcast',
             event: 'food-eaten',
             payload: { foodId: f.id } satisfies FoodEatenPayload,
           });
-          toast.success(`+${FOOD_HP} HP, +${FOOD_WEIGHT} weight 🍔`);
+          toast.success(`+${FOOD_WEIGHT}kg 🌿`);
         }
       }
 
