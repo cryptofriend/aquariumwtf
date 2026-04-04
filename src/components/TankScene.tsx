@@ -579,6 +579,15 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       if (k.has('q')) accel.y += 1;
       if (k.has('e')) accel.y -= 1;
 
+      // Virtual joystick input (mobile)
+      if (Math.abs(joystickState.x) > 0.1 || Math.abs(joystickState.y) > 0.1) {
+        accel.x += joystickState.x;
+        accel.z += joystickState.y;
+      }
+      if (joystickState.upDown !== 0) {
+        accel.y += joystickState.upDown;
+      }
+
       if (accel.lengthSq() > 0) {
         accel.normalize().multiplyScalar(0.8);
         store.velocity.add(accel);
