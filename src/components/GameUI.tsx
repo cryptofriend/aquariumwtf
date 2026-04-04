@@ -36,7 +36,7 @@ function Minimap() {
   });
 
   return (
-    <div className="absolute bottom-4 right-4 pointer-events-auto">
+    <div className="absolute bottom-20 right-4 pointer-events-auto">
       <div className="bg-black/70 backdrop-blur-sm border border-zinc-700 rounded-lg p-2">
         <div className="text-zinc-500 text-[9px] uppercase tracking-wider mb-1 text-center font-bold">Radar</div>
         <div
