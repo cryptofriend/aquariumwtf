@@ -47,9 +47,9 @@ interface FoodEatenPayload {
   foodId: string;
 }
 
-// Scale factor from weight (base weight = INITIAL_WEIGHT → scale 1.0)
+// Scale factor from weight (base weight = 1kg → scale 1.0, grows logarithmically)
 function weightToScale(weight: number): number {
-  return 0.7 + (weight / INITIAL_WEIGHT) * 0.3; // starts at 1.0, grows ~30% per 100 weight
+  return 0.6 + Math.log2(Math.max(1, weight)) * 0.25;
 }
 
 // Fish mesh component
