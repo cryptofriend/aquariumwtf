@@ -144,21 +144,15 @@ export default function GameUI() {
   const store = getStore();
   const hpPct = Math.max(0, store.hp / MAX_HP) * 100;
 
-  // Survival timer
-  const elapsed = store.spawnTime > 0 ? Math.floor((Date.now() - store.spawnTime) / 1000) : 0;
-  const mins = Math.floor(elapsed / 60);
-  const secs = elapsed % 60;
-  const timerStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-
-  // Build live player list
-  const liveEntries: { name: string; kills: number; hp: number; dead: boolean }[] = [];
+  // Build live player list — sorted by weight
+  const liveEntries: { name: string; kills: number; hp: number; dead: boolean; weight: number }[] = [];
   if (!store.spectate) {
-    liveEntries.push({ name: store.name, kills: store.kills, hp: store.hp, dead: store.dead });
+    liveEntries.push({ name: store.name, kills: store.kills, hp: store.hp, dead: store.dead, weight: store.weight });
   }
   store.remotePlayers.forEach(p => {
-    liveEntries.push({ name: p.name, kills: p.kills, hp: p.hp, dead: p.dead });
+    liveEntries.push({ name: p.name, kills: p.kills, hp: p.hp, dead: p.dead, weight: p.weight });
   });
-  liveEntries.sort((a, b) => b.kills - a.kills);
+  liveEntries.sort((a, b) => b.weight - a.weight);
 
   return (
     <div className="fixed inset-0 z-40 pointer-events-none font-mono">
