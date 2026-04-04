@@ -137,7 +137,7 @@ export default function GameUI() {
   }, []);
 
   const store = getStore();
-  const hpPct = Math.max(0, store.hp / MAX_HP) * 100;
+  const weightDisplay = store.weight.toFixed(1);
 
   // Build live player list — sorted by weight
   const liveEntries: { name: string; kills: number; hp: number; dead: boolean; weight: number }[] = [];
