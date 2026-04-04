@@ -2,6 +2,13 @@ import { useEffect, useState } from 'react';
 import { getStore } from '../game/useGameStore';
 import { MAX_HP, TANK_HALF } from '../game/constants';
 import { PlayerState } from '../game/types';
+import { supabase } from '@/integrations/supabase/client';
+
+function formatTime(s: number) {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+}
 
 function hpColor(hp: number) {
   const pct = hp / MAX_HP;
