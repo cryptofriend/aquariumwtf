@@ -119,7 +119,7 @@ function Minimap() {
 
 export default function GameUI() {
   const [, setTick] = useState(0);
-  const [topScores, setTopScores] = useState<{ player_name: string; survival_seconds: number; kills: number }[]>([]);
+  const [topScores, setTopScores] = useState<{ player_name: string; weight: number; kills: number }[]>([]);
 
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 200);
@@ -131,8 +131,8 @@ export default function GameUI() {
     const fetchScores = async () => {
       const { data } = await supabase
         .from('leaderboard')
-        .select('player_name, survival_seconds, kills')
-        .order('survival_seconds', { ascending: false })
+        .select('player_name, weight, kills')
+        .order('weight', { ascending: false })
         .limit(5);
       if (data) setTopScores(data as any);
     };
