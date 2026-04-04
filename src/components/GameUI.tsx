@@ -95,6 +95,12 @@ export default function GameUI() {
   const store = getStore();
   const hpPct = Math.max(0, store.hp / MAX_HP) * 100;
 
+  // Survival timer
+  const elapsed = store.spawnTime > 0 ? Math.floor((Date.now() - store.spawnTime) / 1000) : 0;
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  const timerStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
   // Build leaderboard
   const entries: { name: string; kills: number; hp: number; dead: boolean }[] = [];
   if (!store.spectate) {
