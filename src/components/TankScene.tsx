@@ -373,6 +373,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
             player_name: store.name,
             survival_seconds: survivalSecs,
             kills: store.kills,
+            weight: store.weight,
           } as any).then(({ error }) => {
             if (error) console.error('[Aquarium] Failed to save score:', error);
             else console.log('[Aquarium] Score saved:', survivalSecs, 's');
