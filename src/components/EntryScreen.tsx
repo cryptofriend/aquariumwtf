@@ -12,7 +12,7 @@ export default function EntryScreen({ onEnter }: Props) {
       style={{ background: 'radial-gradient(ellipse at center, #1a1a3e 0%, #0a0a1a 100%)' }}>
       <div className="text-8xl mb-4">🐠</div>
       <h1 className="text-5xl font-mono font-bold text-purple-400 mb-2 tracking-tight">
-        Agent Aquarium
+        Aquarium
       </h1>
       <p className="text-zinc-500 font-mono text-sm mb-8">Survival of the hungriest</p>
 
