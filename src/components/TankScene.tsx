@@ -535,8 +535,11 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         if (nearest) {
           store.lastBiteTime = now;
           const n = nearest as { key: string; dist: number; name: string };
-          const biteAmount = Math.max(0.1, store.weight * 0.1);
-          console.log('[Aquarium] Sending bite to targetId:', n.key, 'damage:', biteAmount);
+          const victim = store.remotePlayers.get(n.key);
+          const victimWeight = victim?.weight ?? 1;
+          const rawBite = Math.max(0.1, store.weight * 0.1);
+          const biteAmount = Math.min(rawBite, victimWeight); // can't take more than victim has
+          console.log('[Aquarium] Sending bite to targetId:', n.key, 'damage:', biteAmount, 'victimWeight:', victimWeight);
           void channelRef.current?.send({
             type: 'broadcast',
             event: 'bite',
@@ -544,8 +547,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
           });
           store.weight = Math.round((store.weight + biteAmount) * 100) / 100;
           toast(`🦷 Bit ${n.name}! (+${biteAmount.toFixed(1)}kg)`);
-          const victim = store.remotePlayers.get(n.key);
-          if (victim && victim.weight - biteAmount <= 0) store.kills++;
+          if (victimWeight - biteAmount <= 0) store.kills++;
         } else {
           toast('No fish in range!', { duration: 1000 });
         }
