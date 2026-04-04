@@ -3,7 +3,7 @@ import { getStore } from '../game/useGameStore';
 import { TANK_HALF, BITE_COOLDOWN_MS } from '../game/constants';
 import { supabase } from '@/integrations/supabase/client';
 import { biteRequest } from './TankScene';
-import { Move } from 'lucide-react';
+import { Move, ArrowUpDown } from 'lucide-react';
 
 function Minimap() {
   const store = getStore();
@@ -191,6 +191,10 @@ export default function GameUI() {
           >
             🦷 BITE
           </button>
+          <div className="bg-black/50 backdrop-blur-sm border border-zinc-700 rounded-lg p-2 flex items-center gap-1">
+            <ArrowUpDown size={16} className="text-zinc-400" />
+            <span className="text-zinc-500 text-[10px]">Q/E</span>
+          </div>
         </div>
       )}
     </div>
