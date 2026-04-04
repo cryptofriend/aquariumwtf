@@ -15,6 +15,7 @@ export default function Index() {
     const store = getStore();
     store.name = name;
     store.phase = 'playing';
+    store.spawnTime = Date.now();
     setPhase('playing');
   }, []);
 
