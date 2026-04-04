@@ -1,10 +1,14 @@
 interface Props {
   killerName: string;
   kills: number;
+  survivalTime: number;
   onSpectate: () => void;
 }
 
-export default function DeathScreen({ killerName, kills, onSpectate }: Props) {
+export default function DeathScreen({ killerName, kills, survivalTime, onSpectate }: Props) {
+  const mins = Math.floor(survivalTime / 60);
+  const secs = survivalTime % 60;
+  const timerStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center"
       style={{ background: 'radial-gradient(ellipse at center, #3b0a0a 0%, #1a0505 100%)' }}>
