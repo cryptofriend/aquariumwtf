@@ -11,6 +11,7 @@ import {
 } from '../game/constants';
 import { FoodOrb, PlayerState } from '../game/types';
 import { addFoodIfMissing, createRandomFoodOrb, getSharedKelpPositions, removeFoodById, replaceFoods } from '../game/sharedWorld';
+import { joystickState } from './VirtualJoystick';
 import { toast } from 'sonner';
 
 const tmpVec = new THREE.Vector3();
@@ -577,6 +578,15 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       if (k.has('d') || k.has('arrowright')) accel.x += 1;
       if (k.has('q')) accel.y += 1;
       if (k.has('e')) accel.y -= 1;
+
+      // Virtual joystick input (mobile)
+      if (Math.abs(joystickState.x) > 0.1 || Math.abs(joystickState.y) > 0.1) {
+        accel.x += joystickState.x;
+        accel.z += joystickState.y;
+      }
+      if (joystickState.upDown !== 0) {
+        accel.y += joystickState.upDown;
+      }
 
       if (accel.lengthSq() > 0) {
         accel.normalize().multiplyScalar(0.8);

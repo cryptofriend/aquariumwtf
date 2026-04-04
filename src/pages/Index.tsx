@@ -3,8 +3,10 @@ import EntryScreen from '../components/EntryScreen';
 import DeathScreen from '../components/DeathScreen';
 import GameUI from '../components/GameUI';
 import Tank3D from '../components/Tank3D';
+import VirtualJoystick from '../components/VirtualJoystick';
 import { getStore, resetStore } from '../game/useGameStore';
 import { GamePhase } from '../game/types';
+import { useIsMobile } from '../hooks/use-mobile';
 
 export default function Index() {
   const [phase, setPhase] = useState<GamePhase>('entry');
@@ -46,6 +48,8 @@ export default function Index() {
     return () => clearInterval(id);
   }, [phase]);
 
+  const isMobile = useIsMobile();
+
   return (
     <>
       {phase === 'entry' && <EntryScreen onEnter={handleEnter} />}
@@ -53,6 +57,7 @@ export default function Index() {
         <>
           <Tank3D spectate={phase === 'spectate'} />
           <GameUI />
+          {isMobile && phase === 'playing' && <VirtualJoystick />}
         </>
       )}
       {phase === 'dead' && (
