@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 
 const tmpVec = new THREE.Vector3();
 const PROXIMITY_RANGE = 10;
+export const biteRequest = { pending: false };
 
 interface EatingOrb {
   id: string;
