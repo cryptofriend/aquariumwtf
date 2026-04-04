@@ -524,8 +524,9 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         }
       }
 
-      // Auto-bite: transfer 10% of attacker weight
-      if (now - store.lastBiteTime > BITE_COOLDOWN_MS) {
+      // Manual bite: space key or UI button
+      if (biteRequest.pending && now - store.lastBiteTime > BITE_COOLDOWN_MS) {
+        biteRequest.pending = false;
         let nearest: { key: string; dist: number; name: string } | null = null;
         store.remotePlayers.forEach((p, key) => {
           if (p.dead) return;
@@ -547,7 +548,11 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
           toast(`🦷 Bit ${n.name}! (+${biteAmount.toFixed(1)}kg)`);
           const victim = store.remotePlayers.get(n.key);
           if (victim && victim.weight - biteAmount <= 0) store.kills++;
+        } else {
+          toast('No fish in range!', { duration: 1000 });
         }
+      } else if (biteRequest.pending) {
+        biteRequest.pending = false;
       }
 
       // Eat food: +1kg

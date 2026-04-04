@@ -182,8 +182,25 @@ export default function GameUI() {
 
       <Minimap />
 
+      {/* Bite button */}
+      {!store.spectate && !store.dead && (
+        <div className="absolute bottom-20 right-4 pointer-events-auto">
+          <button
+            className={`px-6 py-3 rounded-lg font-bold text-lg transition-all ${
+              Date.now() - store.lastBiteTime > BITE_COOLDOWN_MS
+                ? 'bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-900/50 active:scale-95'
+                : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+            }`}
+            onPointerDown={() => { biteRequest.pending = true; }}
+          >
+            🦷 BITE
+          </button>
+          <div className="text-zinc-600 text-[10px] text-center mt-1">or SPACE</div>
+        </div>
+      )}
+
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-zinc-600 text-xs text-center">
-        WASD move · Q/E up/down · Mouse attract · Auto-bite nearby
+        WASD move · Q/E up/down · Mouse attract · SPACE bite
       </div>
     </div>
   );
