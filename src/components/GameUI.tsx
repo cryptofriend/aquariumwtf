@@ -21,18 +21,21 @@ function Minimap() {
     my: ((z + TANK_HALF.z) / (TANK_HALF.z * 2)) * mapH,
   });
 
-  const dots: { mx: number; my: number; color: string; name: string; isPlayer: boolean; dead: boolean }[] = [];
+  const dots: { mx: number; my: number; depth: number; color: string; name: string; isPlayer: boolean; dead: boolean }[] = [];
+
+  // Normalize Y to 0..1 (bottom to top of tank)
+  const normY = (y: number) => (y + TANK_HALF.y) / (TANK_HALF.y * 2);
 
   // Local player
   if (!store.spectate) {
     const { mx, my } = toMap(store.position.x, store.position.z);
-    dots.push({ mx, my, color: store.color, name: store.name, isPlayer: true, dead: store.dead });
+    dots.push({ mx, my, depth: normY(store.position.y), color: store.color, name: store.name, isPlayer: true, dead: store.dead });
   }
 
   // Remote players
   store.remotePlayers.forEach((p) => {
     const { mx, my } = toMap(p.x, p.z);
-    dots.push({ mx, my, color: p.color, name: p.name, isPlayer: false, dead: p.dead });
+    dots.push({ mx, my, depth: normY(p.y), color: p.color, name: p.name, isPlayer: false, dead: p.dead });
   });
 
   return (
