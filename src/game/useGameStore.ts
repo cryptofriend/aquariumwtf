@@ -18,6 +18,7 @@ export interface GameStore {
   flashUntil: number;
   spectate: boolean;
   spawnTime: number;
+  immuneUntil: number;
 }
 
 function createGameStore(): GameStore {
