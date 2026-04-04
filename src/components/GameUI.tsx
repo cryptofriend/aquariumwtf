@@ -188,9 +188,9 @@ export default function GameUI() {
             <span className="text-zinc-500 text-xs ml-1">kills</span>
           </div>
           <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg px-4 py-2">
-            <span className="text-amber-400 text-xl font-bold">{store.weight}</span>
+            <span className="text-amber-400 text-xl font-bold">{weightDisplay}</span>
             <span className="text-zinc-500 text-xs ml-1">kg</span>
-            <span className="text-zinc-600 text-[10px] ml-2">bite: {Math.max(1, Math.round(store.weight * 0.1))}</span>
+            <span className="text-zinc-600 text-[10px] ml-2">bite: {(store.weight * 0.1).toFixed(1)}kg</span>
           </div>
         </div>
       )}
