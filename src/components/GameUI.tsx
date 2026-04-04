@@ -119,9 +119,25 @@ function Minimap() {
 
 export default function GameUI() {
   const [, setTick] = useState(0);
+  const [topScores, setTopScores] = useState<{ player_name: string; survival_seconds: number; kills: number }[]>([]);
 
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 200);
+    return () => clearInterval(id);
+  }, []);
+
+  // Fetch top scores on mount and every 30s
+  useEffect(() => {
+    const fetchScores = async () => {
+      const { data } = await supabase
+        .from('leaderboard')
+        .select('player_name, survival_seconds, kills')
+        .order('survival_seconds', { ascending: false })
+        .limit(5);
+      if (data) setTopScores(data as any);
+    };
+    fetchScores();
+    const id = setInterval(fetchScores, 30000);
     return () => clearInterval(id);
   }, []);
 
@@ -134,15 +150,15 @@ export default function GameUI() {
   const secs = elapsed % 60;
   const timerStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 
-  // Build leaderboard
-  const entries: { name: string; kills: number; hp: number; dead: boolean }[] = [];
+  // Build live player list
+  const liveEntries: { name: string; kills: number; hp: number; dead: boolean }[] = [];
   if (!store.spectate) {
-    entries.push({ name: store.name, kills: store.kills, hp: store.hp, dead: store.dead });
+    liveEntries.push({ name: store.name, kills: store.kills, hp: store.hp, dead: store.dead });
   }
   store.remotePlayers.forEach(p => {
-    entries.push({ name: p.name, kills: p.kills, hp: p.hp, dead: p.dead });
+    liveEntries.push({ name: p.name, kills: p.kills, hp: p.hp, dead: p.dead });
   });
-  entries.sort((a, b) => b.kills - a.kills);
+  liveEntries.sort((a, b) => b.kills - a.kills);
 
   return (
     <div className="fixed inset-0 z-40 pointer-events-none font-mono">
