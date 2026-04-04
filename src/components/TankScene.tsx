@@ -312,6 +312,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
               hp: p.hp,
               kills: p.kills,
               dead: p.dead,
+              weight: p.weight ?? INITIAL_WEIGHT,
             });
           }
         });
