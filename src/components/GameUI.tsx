@@ -105,12 +105,12 @@ export default function GameUI() {
 
   const store = getStore();
 
-  const liveEntries: { name: string; kills: number; dead: boolean; weight: number }[] = [];
+  const liveEntries: { name: string; kills: number; dead: boolean; weight: number; isMe: boolean }[] = [];
   if (!store.spectate) {
-    liveEntries.push({ name: store.name, kills: store.kills, dead: store.dead, weight: store.weight });
+    liveEntries.push({ name: store.name, kills: store.kills, dead: store.dead, weight: store.weight, isMe: true });
   }
   store.remotePlayers.forEach(p => {
-    liveEntries.push({ name: p.name, kills: p.kills, dead: p.dead, weight: p.weight });
+    liveEntries.push({ name: p.name, kills: p.kills, dead: p.dead, weight: p.weight, isMe: false });
   });
   liveEntries.sort((a, b) => b.weight - a.weight);
 
