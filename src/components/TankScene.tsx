@@ -341,6 +341,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
             hp: store.hp,
             kills: store.kills,
             dead: store.dead,
+            weight: store.weight,
           });
           console.log('[Aquarium] Track result:', trackResult);
         }
