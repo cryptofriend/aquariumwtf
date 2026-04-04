@@ -10,6 +10,7 @@ export const DAMPING = 0.86;
 export const MOUSE_LERP = 0.03;
 export const REMOTE_LERP = 0.12;
 export const DEATH_DELAY_MS = 4000;
+export const BITE_IMMUNITY_MS = 15 * 60 * 1000; // 15 minutes
 export const INITIAL_WEIGHT = 1;
 
 export const FISH_COLORS = [
