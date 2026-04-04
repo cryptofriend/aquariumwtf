@@ -177,7 +177,7 @@ export default function GameUI() {
               <div key={i} className="flex items-center gap-2 text-xs py-0.5">
                 <span className="text-zinc-400 w-4">{i + 1}</span>
                 <span className="text-zinc-200 truncate flex-1">{s.player_name}</span>
-                <span className="text-cyan-400">{formatTime(s.survival_seconds)}</span>
+                <span className="text-amber-400">{s.weight}kg</span>
                 <span className="text-red-400">{s.kills}🗡</span>
               </div>
             ))}
