@@ -237,6 +237,10 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
   const channelRef = useRef<any>(null);
   const biteChannelRef = useRef<any>(null);
   const deathTimeout = useRef<number | null>(null);
+  const [eatingOrbs, setEatingOrbs] = useState<EatingOrb[]>([]);
+  const [proximities, setProximities] = useState<{ id: string; pos: THREE.Vector3; dist: number }[]>([]);
+  const proximityRef = useRef<{ id: string; pos: THREE.Vector3; dist: number }[]>([]);
+  const lastProximityUpdate = useRef(0);
 
   // Kelp positions
   const kelpPositions = useMemo<[number, number, number][]>(() =>
