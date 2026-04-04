@@ -2,14 +2,15 @@ import { useRef, useMemo, useEffect, useCallback, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import * as THREE from 'three';
-import { getStore, spawnFood } from '../game/useGameStore';
+import { getStore } from '../game/useGameStore';
 import { supabase } from '@/integrations/supabase/client';
 import {
   TANK_HALF, DAMPING, MAX_SPEED, MOUSE_LERP, BITE_RANGE,
   BITE_COOLDOWN_MS, BITE_DAMAGE, FOOD_HP, MAX_HP, BROADCAST_MS,
   FOOD_SPAWN_MS, REMOTE_LERP, DEATH_DELAY_MS, uid, INITIAL_WEIGHT, FOOD_WEIGHT
 } from '../game/constants';
-import { PlayerState } from '../game/types';
+import { FoodOrb, PlayerState } from '../game/types';
+import { addFoodIfMissing, createRandomFoodOrb, getSharedKelpPositions, removeFoodById, replaceFoods } from '../game/sharedWorld';
 import { toast } from 'sonner';
 
 const tmpVec = new THREE.Vector3();
@@ -22,6 +23,27 @@ interface EatingOrb {
   z: number;
   startTime: number;
   duration: number;
+}
+
+interface PlayerBroadcastState extends PlayerState {
+  id: string;
+}
+
+interface WorldSyncRequestPayload {
+  requesterId: string;
+}
+
+interface WorldSyncResponsePayload {
+  targetId: string;
+  foods: FoodOrb[];
+}
+
+interface FoodSpawnPayload {
+  food: FoodOrb;
+}
+
+interface FoodEatenPayload {
+  foodId: string;
 }
 
 // Scale factor from weight (base weight = INITIAL_WEIGHT → scale 1.0)
@@ -245,20 +267,59 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
   const deathTimeout = useRef<number | null>(null);
   const [eatingOrbs, setEatingOrbs] = useState<EatingOrb[]>([]);
   const [proximities, setProximities] = useState<{ id: string; pos: THREE.Vector3; dist: number }[]>([]);
-  const [, setPresenceVersion] = useState(0);
+  const [, setSceneVersion] = useState(0);
   const proximityRef = useRef<{ id: string; pos: THREE.Vector3; dist: number }[]>([]);
   const lastProximityUpdate = useRef(0);
-  const bumpPresenceVersion = useCallback(() => {
-    setPresenceVersion((version) => version + 1);
+  const isWorldHostRef = useRef(false);
+  const bumpSceneVersion = useCallback(() => {
+    setSceneVersion((version) => version + 1);
+  }, []);
+  const upsertRemotePlayer = useCallback((playerId: string, player: PlayerState) => {
+    const store = getStore();
+    store.remotePlayers.set(playerId, player);
+    bumpSceneVersion();
+  }, [bumpSceneVersion]);
+  const addSharedFood = useCallback((food: FoodOrb) => {
+    const store = getStore();
+    const added = addFoodIfMissing(store.food, food);
+    if (added) bumpSceneVersion();
+    return added;
+  }, [bumpSceneVersion]);
+  const replaceSharedFoods = useCallback((foods: FoodOrb[]) => {
+    const store = getStore();
+    replaceFoods(store.food, foods);
+    bumpSceneVersion();
+  }, [bumpSceneVersion]);
+  const consumeSharedFood = useCallback((foodId: string) => {
+    const store = getStore();
+    const removed = removeFoodById(store.food, foodId);
+    if (removed) bumpSceneVersion();
+    return removed;
+  }, [bumpSceneVersion]);
+  const broadcastPlayerState = useCallback(() => {
+    const store = getStore();
+    if (!channelRef.current) return;
+
+    void channelRef.current.send({
+      type: 'broadcast',
+      event: 'player-state',
+      payload: {
+        id: uid,
+        name: store.name,
+        color: store.color,
+        x: store.position.x,
+        y: store.position.y,
+        z: store.position.z,
+        hp: store.hp,
+        kills: store.kills,
+        dead: store.dead,
+        weight: store.weight,
+      } satisfies PlayerBroadcastState,
+    });
   }, []);
 
   // Kelp positions
-  const kelpPositions = useMemo<[number, number, number][]>(() =>
-    Array.from({ length: 18 }, () => [
-      (Math.random() - 0.5) * TANK_HALF.x * 1.6,
-      0,
-      (Math.random() - 0.5) * TANK_HALF.z * 1.6,
-    ]), []);
+  const kelpPositions = useMemo<[number, number, number][]>(() => getSharedKelpPositions(), []);
 
   // Keyboard
   useEffect(() => {
@@ -295,77 +356,128 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
     };
   }, [camera]);
 
-  // Supabase channels
+  // Realtime channels
   useEffect(() => {
     const store = getStore();
-    console.log('[Aquarium] Setting up realtime channel, uid:', uid, 'name:', store.name);
-
     const channel = supabase.channel('aquarium-live', {
       config: { presence: { key: uid } },
     });
+
+    const resolveHost = () => {
+      const state = channel.presenceState();
+      const presenceKeys = Array.from(new Set([uid, ...Object.keys(state)])).sort();
+      isWorldHostRef.current = presenceKeys[0] === uid;
+    };
 
     channel
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
         const currentIds = new Set<string>();
+
         Object.entries(state).forEach(([key, presences]) => {
           if (key === uid) return;
+
           currentIds.add(key);
-          const p = (presences as any[])[0];
-          if (p) {
-            store.remotePlayers.set(key, {
-              name: p.name,
-              color: p.color,
-              x: p.x,
-              y: p.y,
-              z: p.z,
-              hp: p.hp,
-              kills: p.kills,
-              dead: p.dead,
-              weight: p.weight ?? INITIAL_WEIGHT,
-            });
+          const presence = (presences as any[])?.[0];
+          if (!presence) return;
+
+          store.remotePlayers.set(key, {
+            name: presence.name || 'Unknown fish',
+            color: presence.color || '#70a1ff',
+            x: presence.x ?? 0,
+            y: presence.y ?? 0,
+            z: presence.z ?? 0,
+            hp: presence.hp ?? MAX_HP,
+            kills: presence.kills ?? 0,
+            dead: Boolean(presence.dead),
+            weight: presence.weight ?? INITIAL_WEIGHT,
+          });
+        });
+
+        store.remotePlayers.forEach((_, key) => {
+          if (!currentIds.has(key)) {
+            store.remotePlayers.delete(key);
           }
         });
-        // Remove departed
-        store.remotePlayers.forEach((_, key) => {
-          if (!currentIds.has(key)) store.remotePlayers.delete(key);
-        });
-        bumpPresenceVersion();
-        console.log('[Aquarium] Presence sync — remote players:', store.remotePlayers.size, 'total keys:', Object.keys(state).length);
+
+        resolveHost();
+        bumpSceneVersion();
       })
       .on('presence', { event: 'join' }, ({ key, newPresences }) => {
         if (key === uid) return;
-        const p = (newPresences as any[])?.[0];
-        if (p) {
-          store.remotePlayers.set(key, {
-            name: p.name,
-            color: p.color,
-            x: p.x,
-            y: p.y,
-            z: p.z,
-            hp: p.hp,
-            kills: p.kills,
-            dead: p.dead,
-            weight: p.weight ?? INITIAL_WEIGHT,
+
+        const presence = (newPresences as any[])?.[0];
+        if (presence) {
+          upsertRemotePlayer(key, {
+            name: presence.name || 'Unknown fish',
+            color: presence.color || '#70a1ff',
+            x: presence.x ?? 0,
+            y: presence.y ?? 0,
+            z: presence.z ?? 0,
+            hp: presence.hp ?? MAX_HP,
+            kills: presence.kills ?? 0,
+            dead: Boolean(presence.dead),
+            weight: presence.weight ?? INITIAL_WEIGHT,
           });
-          bumpPresenceVersion();
         }
-        const joinName = p?.name || 'Unknown fish';
-        toast(`🐟 ${joinName} joined the tank!`, { duration: 3000 });
-        console.log('[Aquarium] Player joined:', key, newPresences);
+
+        resolveHost();
+        toast(`🐟 ${presence?.name || 'Unknown fish'} joined the tank!`, { duration: 3000 });
       })
       .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-        const p = (leftPresences as any[])?.[0];
-        const leaveName = p?.name || 'A fish';
-        toast(`💨 ${leaveName} left the tank`, { duration: 3000 });
-        console.log('[Aquarium] Player left:', key);
+        const presence = (leftPresences as any[])?.[0];
         store.remotePlayers.delete(key);
-        bumpPresenceVersion();
+        resolveHost();
+        bumpSceneVersion();
+        toast(`💨 ${presence?.name || 'A fish'} left the tank`, { duration: 3000 });
       })
-      .subscribe(async (status, err) => {
-        console.log('[Aquarium] Channel status:', status, err || '');
+      .on('broadcast', { event: 'player-state' }, ({ payload }) => {
+        const player = payload as PlayerBroadcastState;
+        if (!player || player.id === uid) return;
+
+        upsertRemotePlayer(player.id, {
+          name: player.name,
+          color: player.color,
+          x: player.x,
+          y: player.y,
+          z: player.z,
+          hp: player.hp,
+          kills: player.kills,
+          dead: player.dead,
+          weight: player.weight ?? INITIAL_WEIGHT,
+        });
+      })
+      .on('broadcast', { event: 'world-sync-request' }, ({ payload }) => {
+        const request = payload as WorldSyncRequestPayload;
+        if (!request?.requesterId || request.requesterId === uid || !isWorldHostRef.current) return;
+
+        void channel.send({
+          type: 'broadcast',
+          event: 'world-sync-response',
+          payload: {
+            targetId: request.requesterId,
+            foods: getStore().food,
+          } satisfies WorldSyncResponsePayload,
+        });
+      })
+      .on('broadcast', { event: 'world-sync-response' }, ({ payload }) => {
+        const response = payload as WorldSyncResponsePayload;
+        if (response?.targetId !== uid || !Array.isArray(response.foods)) return;
+        replaceSharedFoods(response.foods);
+      })
+      .on('broadcast', { event: 'food-spawned' }, ({ payload }) => {
+        const event = payload as FoodSpawnPayload;
+        if (!event?.food) return;
+        addSharedFood(event.food);
+      })
+      .on('broadcast', { event: 'food-eaten' }, ({ payload }) => {
+        const event = payload as FoodEatenPayload;
+        if (!event?.foodId) return;
+        consumeSharedFood(event.foodId);
+      })
+      .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          const trackResult = await channel.track({
+          await channel.track({
             name: store.name,
             color: store.color,
             x: store.position.x,
@@ -376,7 +488,14 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
             dead: store.dead,
             weight: store.weight,
           });
-          console.log('[Aquarium] Track result:', trackResult);
+
+          resolveHost();
+          broadcastPlayerState();
+          void channel.send({
+            type: 'broadcast',
+            event: 'world-sync-request',
+            payload: { requesterId: uid } satisfies WorldSyncRequestPayload,
+          });
         }
       });
 
@@ -529,17 +648,20 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       for (let i = store.food.length - 1; i >= 0; i--) {
         const f = store.food[i];
         const dist = store.position.distanceTo(tmpVec.set(f.x, f.y, f.z));
-        if (dist < 2.2) {
-          // Start eat animation
+        if (dist < 2.2 && consumeSharedFood(f.id)) {
           setEatingOrbs(prev => [...prev, {
             id: f.id,
             x: f.x, y: f.y, z: f.z,
             startTime: Date.now(),
             duration: 400,
           }]);
-          store.food.splice(i, 1);
           store.hp = Math.min(MAX_HP, store.hp + FOOD_HP);
           store.weight += FOOD_WEIGHT;
+          void channelRef.current?.send({
+            type: 'broadcast',
+            event: 'food-eaten',
+            payload: { foodId: f.id } satisfies FoodEatenPayload,
+          });
           toast.success(`+${FOOD_HP} HP, +${FOOD_WEIGHT} weight 🍔`);
         }
       }
@@ -574,27 +696,25 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         }
       }
 
-      // Broadcast position
+      // Broadcast player state
       if (now - lastBroadcast.current > BROADCAST_MS && channelRef.current) {
         lastBroadcast.current = now;
-        channelRef.current.track({
-          name: store.name,
-          color: store.color,
-          x: store.position.x,
-          y: store.position.y,
-          z: store.position.z,
-          hp: store.hp,
-          kills: store.kills,
-          dead: store.dead,
-          weight: store.weight,
-        });
+        broadcastPlayerState();
       }
     }
 
-    // Spawn food
-    if (now - lastFoodSpawn.current > FOOD_SPAWN_MS) {
+    // Spawn shared food from the elected host only
+    if (now - lastFoodSpawn.current > FOOD_SPAWN_MS && channelRef.current && isWorldHostRef.current) {
       lastFoodSpawn.current = now;
-      spawnFood(store.food);
+      const food = createRandomFoodOrb();
+
+      if (addSharedFood(food)) {
+        void channelRef.current.send({
+          type: 'broadcast',
+          event: 'food-spawned',
+          payload: { food } satisfies FoodSpawnPayload,
+        });
+      }
     }
 
     // Camera follow
