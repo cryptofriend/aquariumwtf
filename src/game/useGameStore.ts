@@ -9,6 +9,7 @@ export interface GameStore {
   name: string;
   color: string;
   hp: number;
+  weight: number;
   kills: number;
   dead: boolean;
   killerName: string;
