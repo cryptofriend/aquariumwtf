@@ -229,7 +229,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
   const lastBroadcast = useRef(0);
   const lastFoodSpawn = useRef(0);
   const channelRef = useRef<any>(null);
-  const biteChannelRef = useRef<any>(null);
+  
   const deathTimeout = useRef<number | null>(null);
   const [eatingOrbs, setEatingOrbs] = useState<EatingOrb[]>([]);
   const [proximities, setProximities] = useState<{ id: string; pos: THREE.Vector3; dist: number }[]>([]);
