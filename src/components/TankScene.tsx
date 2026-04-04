@@ -420,10 +420,13 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
     biteChannel
       .on('broadcast', { event: 'bite' }, ({ payload }) => {
         if (store.dead) return;
+        const now = Date.now();
+        if (now < store.immuneUntil) return; // immune, ignore bite
         const biteAmount = payload.damage || 0.1;
         store.weight = Math.round(Math.max(0, store.weight - biteAmount) * 100) / 100;
-        store.flashUntil = Date.now() + 300;
-        toast.error(`Bitten by ${payload.attackerName}! -${biteAmount.toFixed(1)}kg`);
+        store.flashUntil = now + 300;
+        store.immuneUntil = now + BITE_IMMUNITY_MS;
+        toast.error(`Bitten by ${payload.attackerName}! -${biteAmount.toFixed(1)}kg — immune for 15min`);
 
         if (store.weight <= 0 && !store.dead) {
           store.dead = true;
