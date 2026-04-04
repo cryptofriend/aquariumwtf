@@ -184,7 +184,7 @@ export default function GameUI() {
 
       {/* Bite button */}
       {!store.spectate && !store.dead && (
-        <div className="absolute bottom-20 right-4 pointer-events-auto">
+        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 pointer-events-auto">
           <button
             className={`px-6 py-3 rounded-lg font-bold text-lg transition-all ${
               Date.now() - store.lastBiteTime > BITE_COOLDOWN_MS
