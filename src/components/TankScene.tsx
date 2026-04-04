@@ -1,4 +1,4 @@
-import { useRef, useMemo, useEffect, useCallback } from 'react';
+import { useRef, useMemo, useEffect, useCallback, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import * as THREE from 'three';
@@ -13,6 +13,16 @@ import { PlayerState } from '../game/types';
 import { toast } from 'sonner';
 
 const tmpVec = new THREE.Vector3();
+const PROXIMITY_RANGE = 10; // Show distance labels within this range
+
+interface EatingOrb {
+  id: string;
+  x: number;
+  y: number;
+  z: number;
+  startTime: number;
+  duration: number;
+}
 
 // Fish mesh component
 function FishMesh({ color, opacity = 1 }: { color: string; opacity?: number }) {
@@ -120,13 +130,77 @@ function Bubbles() {
   );
 }
 
+// Distance label that floats between player and target
+function DistanceLabel({ targetPos, distance }: { targetPos: THREE.Vector3; distance: number }) {
+  const ref = useRef<THREE.Group>(null!);
+  const store = getStore();
+
+  useFrame(() => {
+    if (!ref.current) return;
+    // Position at midpoint between player and target
+    ref.current.position.lerpVectors(store.position, targetPos, 0.5);
+    ref.current.position.y += 1.5;
+  });
+
+  const color = distance < BITE_RANGE ? '#ff4444' : distance < 5 ? '#ffaa00' : '#88ccff';
+
+  return (
+    <group ref={ref}>
+      <Text fontSize={0.4} color={color} anchorX="center" anchorY="middle" font={undefined}>
+        {distance.toFixed(1)}m
+      </Text>
+    </group>
+  );
+}
+
+// Animated food orb being eaten (scales down + flies toward player)
+function EatingFoodOrb({ orb, onComplete }: { orb: EatingOrb; onComplete: () => void }) {
+  const ref = useRef<THREE.Group>(null!);
+  const completed = useRef(false);
+
+  useFrame(() => {
+    if (!ref.current || completed.current) return;
+    const store = getStore();
+    const elapsed = Date.now() - orb.startTime;
+    const progress = Math.min(elapsed / orb.duration, 1);
+
+    // Ease out
+    const ease = 1 - Math.pow(1 - progress, 3);
+
+    // Scale down
+    const scale = 1 - ease * 0.9;
+    ref.current.scale.setScalar(scale);
+
+    // Move toward player
+    tmpVec.set(orb.x, orb.y, orb.z);
+    ref.current.position.lerpVectors(tmpVec, store.position, ease);
+
+    // Spin faster
+    ref.current.rotation.y += 0.3;
+
+    if (progress >= 1 && !completed.current) {
+      completed.current = true;
+      onComplete();
+    }
+  });
+
+  return (
+    <group ref={ref} position={[orb.x, orb.y, orb.z]}>
+      <pointLight color="#22ff44" intensity={3} distance={4} />
+      <mesh>
+        <sphereGeometry args={[0.4, 8, 8]} />
+        <meshStandardMaterial color="#44ff44" emissive="#22ff00" emissiveIntensity={1.2} />
+      </mesh>
+    </group>
+  );
+}
+
 function FoodOrbs() {
   const ref = useRef<THREE.Group>(null!);
 
   useFrame(({ clock }) => {
     const store = getStore();
     if (!ref.current) return;
-    // Update positions
     ref.current.children.forEach((child, i) => {
       const f = store.food[i];
       if (!f) return;
@@ -135,7 +209,6 @@ function FoodOrbs() {
     });
   });
 
-  // Re-render when food count changes — we just do it in the parent
   const store = getStore();
 
   return (
@@ -164,6 +237,10 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
   const channelRef = useRef<any>(null);
   const biteChannelRef = useRef<any>(null);
   const deathTimeout = useRef<number | null>(null);
+  const [eatingOrbs, setEatingOrbs] = useState<EatingOrb[]>([]);
+  const [proximities, setProximities] = useState<{ id: string; pos: THREE.Vector3; dist: number }[]>([]);
+  const proximityRef = useRef<{ id: string; pos: THREE.Vector3; dist: number }[]>([]);
+  const lastProximityUpdate = useRef(0);
 
   // Kelp positions
   const kelpPositions = useMemo<[number, number, number][]>(() =>
@@ -359,14 +436,51 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         }
       }
 
-      // Eat food
+      // Eat food (with animation)
       for (let i = store.food.length - 1; i >= 0; i--) {
         const f = store.food[i];
         const dist = store.position.distanceTo(tmpVec.set(f.x, f.y, f.z));
         if (dist < 2.2) {
+          // Start eat animation
+          setEatingOrbs(prev => [...prev, {
+            id: f.id,
+            x: f.x, y: f.y, z: f.z,
+            startTime: Date.now(),
+            duration: 400,
+          }]);
           store.food.splice(i, 1);
           store.hp = Math.min(MAX_HP, store.hp + FOOD_HP);
           toast.success(`+${FOOD_HP} HP 🍔`);
+        }
+      }
+
+      // Update proximity labels (throttled to avoid re-renders every frame)
+      if (now - lastProximityUpdate.current > 150) {
+        lastProximityUpdate.current = now;
+        const nearby: { id: string; pos: THREE.Vector3; dist: number }[] = [];
+
+        // Distance to remote fish
+        store.remotePlayers.forEach((p, key) => {
+          if (p.dead) return;
+          const d = store.position.distanceTo(tmpVec.set(p.x, p.y, p.z));
+          if (d < PROXIMITY_RANGE) {
+            nearby.push({ id: `fish-${key}`, pos: new THREE.Vector3(p.x, p.y, p.z), dist: d });
+          }
+        });
+
+        // Distance to food
+        store.food.forEach((f) => {
+          const d = store.position.distanceTo(tmpVec.set(f.x, f.y, f.z));
+          if (d < PROXIMITY_RANGE) {
+            nearby.push({ id: `food-${f.id}`, pos: new THREE.Vector3(f.x, f.y, f.z), dist: d });
+          }
+        });
+
+        // Only update state if changed
+        if (JSON.stringify(nearby.map(n => n.id)) !== JSON.stringify(proximityRef.current.map(n => n.id))
+          || nearby.some((n, i) => Math.abs(n.dist - (proximityRef.current[i]?.dist ?? 0)) > 0.3)) {
+          proximityRef.current = nearby;
+          setProximities(nearby);
         }
       }
 
@@ -470,6 +584,20 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       {/* Remote players */}
       {Array.from(store.remotePlayers.entries()).map(([key, p]) => (
         <RemoteFish key={key} id={key} player={p} />
+      ))}
+
+      {/* Distance labels */}
+      {!spectate && !store.dead && proximities.map((p) => (
+        <DistanceLabel key={p.id} targetPos={p.pos} distance={p.dist} />
+      ))}
+
+      {/* Eating food animations */}
+      {eatingOrbs.map((orb) => (
+        <EatingFoodOrb
+          key={orb.id}
+          orb={orb}
+          onComplete={() => setEatingOrbs(prev => prev.filter(o => o.id !== orb.id))}
+        />
       ))}
     </>
   );
