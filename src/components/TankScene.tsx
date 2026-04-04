@@ -245,8 +245,12 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
   const deathTimeout = useRef<number | null>(null);
   const [eatingOrbs, setEatingOrbs] = useState<EatingOrb[]>([]);
   const [proximities, setProximities] = useState<{ id: string; pos: THREE.Vector3; dist: number }[]>([]);
+  const [, setPresenceVersion] = useState(0);
   const proximityRef = useRef<{ id: string; pos: THREE.Vector3; dist: number }[]>([]);
   const lastProximityUpdate = useRef(0);
+  const bumpPresenceVersion = useCallback(() => {
+    setPresenceVersion((version) => version + 1);
+  }, []);
 
   // Kelp positions
   const kelpPositions = useMemo<[number, number, number][]>(() =>
@@ -326,11 +330,26 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         store.remotePlayers.forEach((_, key) => {
           if (!currentIds.has(key)) store.remotePlayers.delete(key);
         });
+        bumpPresenceVersion();
         console.log('[Aquarium] Presence sync — remote players:', store.remotePlayers.size, 'total keys:', Object.keys(state).length);
       })
       .on('presence', { event: 'join' }, ({ key, newPresences }) => {
         if (key === uid) return;
         const p = (newPresences as any[])?.[0];
+        if (p) {
+          store.remotePlayers.set(key, {
+            name: p.name,
+            color: p.color,
+            x: p.x,
+            y: p.y,
+            z: p.z,
+            hp: p.hp,
+            kills: p.kills,
+            dead: p.dead,
+            weight: p.weight ?? INITIAL_WEIGHT,
+          });
+          bumpPresenceVersion();
+        }
         const joinName = p?.name || 'Unknown fish';
         toast(`🐟 ${joinName} joined the tank!`, { duration: 3000 });
         console.log('[Aquarium] Player joined:', key, newPresences);
@@ -341,6 +360,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         toast(`💨 ${leaveName} left the tank`, { duration: 3000 });
         console.log('[Aquarium] Player left:', key);
         store.remotePlayers.delete(key);
+        bumpPresenceVersion();
       })
       .subscribe(async (status, err) => {
         console.log('[Aquarium] Channel status:', status, err || '');
