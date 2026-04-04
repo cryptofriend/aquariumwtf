@@ -507,11 +507,13 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
     biteChannel
       .on('broadcast', { event: 'bite' }, ({ payload }) => {
         if (store.dead) return;
-        store.hp = Math.max(0, store.hp - (payload.damage || BITE_DAMAGE));
+        const biteAmount = payload.damage || 0.1;
+        // Lose weight from being bitten
+        store.weight = Math.round(Math.max(0, store.weight - biteAmount) * 100) / 100;
         store.flashUntil = Date.now() + 300;
-        toast.error(`Bitten by ${payload.attackerName}! -${payload.damage} HP`);
+        toast.error(`Bitten by ${payload.attackerName}! -${biteAmount.toFixed(1)}kg`);
 
-        if (store.hp <= 0 && !store.dead) {
+        if (store.weight <= 0 && !store.dead) {
           store.dead = true;
           store.killerName = payload.attackerName || 'Unknown';
           // Save score to leaderboard
