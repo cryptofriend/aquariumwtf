@@ -143,7 +143,7 @@ export default function GameUI() {
         )}
       </div>
 
-      {/* Kill counter + Weight */}
+      {/* Kill counter + Weight + Immunity */}
       {!store.spectate && (
         <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
           <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg px-4 py-2">
@@ -155,6 +155,17 @@ export default function GameUI() {
             <span className="text-zinc-500 text-xs ml-1">kg</span>
             <span className="text-zinc-600 text-[10px] ml-2">bite: {(store.weight * 0.1).toFixed(1)}kg</span>
           </div>
+          {store.immuneUntil > Date.now() && (() => {
+            const remaining = Math.max(0, store.immuneUntil - Date.now());
+            const mins = Math.floor(remaining / 60000);
+            const secs = Math.floor((remaining % 60000) / 1000);
+            return (
+              <div className="bg-black/60 backdrop-blur-sm border border-cyan-800 rounded-lg px-4 py-2">
+                <span className="text-cyan-400 text-sm font-bold">🛡 Immune</span>
+                <span className="text-cyan-300 text-sm ml-2">{mins}:{secs.toString().padStart(2, '0')}</span>
+              </div>
+            );
+          })()}
         </div>
       )}
 
