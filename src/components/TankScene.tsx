@@ -436,14 +436,51 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         }
       }
 
-      // Eat food
+      // Eat food (with animation)
       for (let i = store.food.length - 1; i >= 0; i--) {
         const f = store.food[i];
         const dist = store.position.distanceTo(tmpVec.set(f.x, f.y, f.z));
         if (dist < 2.2) {
+          // Start eat animation
+          setEatingOrbs(prev => [...prev, {
+            id: f.id,
+            x: f.x, y: f.y, z: f.z,
+            startTime: Date.now(),
+            duration: 400,
+          }]);
           store.food.splice(i, 1);
           store.hp = Math.min(MAX_HP, store.hp + FOOD_HP);
           toast.success(`+${FOOD_HP} HP 🍔`);
+        }
+      }
+
+      // Update proximity labels (throttled to avoid re-renders every frame)
+      if (now - lastProximityUpdate.current > 150) {
+        lastProximityUpdate.current = now;
+        const nearby: { id: string; pos: THREE.Vector3; dist: number }[] = [];
+
+        // Distance to remote fish
+        store.remotePlayers.forEach((p, key) => {
+          if (p.dead) return;
+          const d = store.position.distanceTo(tmpVec.set(p.x, p.y, p.z));
+          if (d < PROXIMITY_RANGE) {
+            nearby.push({ id: `fish-${key}`, pos: new THREE.Vector3(p.x, p.y, p.z), dist: d });
+          }
+        });
+
+        // Distance to food
+        store.food.forEach((f) => {
+          const d = store.position.distanceTo(tmpVec.set(f.x, f.y, f.z));
+          if (d < PROXIMITY_RANGE) {
+            nearby.push({ id: `food-${f.id}`, pos: new THREE.Vector3(f.x, f.y, f.z), dist: d });
+          }
+        });
+
+        // Only update state if changed
+        if (JSON.stringify(nearby.map(n => n.id)) !== JSON.stringify(proximityRef.current.map(n => n.id))
+          || nearby.some((n, i) => Math.abs(n.dist - (proximityRef.current[i]?.dist ?? 0)) > 0.3)) {
+          proximityRef.current = nearby;
+          setProximities(nearby);
         }
       }
 
