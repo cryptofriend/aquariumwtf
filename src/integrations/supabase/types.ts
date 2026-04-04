@@ -21,6 +21,7 @@ export type Database = {
           kills: number
           player_name: string
           survival_seconds: number
+          weight: number
         }
         Insert: {
           created_at?: string
@@ -28,6 +29,7 @@ export type Database = {
           kills?: number
           player_name: string
           survival_seconds?: number
+          weight?: number
         }
         Update: {
           created_at?: string
@@ -35,6 +37,7 @@ export type Database = {
           kills?: number
           player_name?: string
           survival_seconds?: number
+          weight?: number
         }
         Relationships: []
       }
