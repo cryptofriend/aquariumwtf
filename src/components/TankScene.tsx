@@ -405,7 +405,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         const biteAmount = payload.damage || 0.1;
         store.weight = Math.round(Math.max(0, store.weight - biteAmount) * 100) / 100;
         console.log('[Aquarium] Weight reduced to:', store.weight);
-        store.flashUntil = now + 300;
+        store.flashUntil = Date.now() + 300;
         toast.error(`Bitten by ${payload.attackerName}! -${biteAmount.toFixed(1)}kg`);
 
         if (store.weight <= 0 && !store.dead) {
