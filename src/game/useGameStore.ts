@@ -19,6 +19,7 @@ export interface GameStore {
   lastBiteTime: number;
   flashUntil: number;
   spectate: boolean;
+  spawnTime: number;
 }
 
 export function createGameStore(): GameStore {
