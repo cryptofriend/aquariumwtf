@@ -24,10 +24,16 @@ interface EatingOrb {
   duration: number;
 }
 
+// Scale factor from weight (base weight = INITIAL_WEIGHT → scale 1.0)
+function weightToScale(weight: number): number {
+  return 0.7 + (weight / INITIAL_WEIGHT) * 0.3; // starts at 1.0, grows ~30% per 100 weight
+}
+
 // Fish mesh component
-function FishMesh({ color, opacity = 1 }: { color: string; opacity?: number }) {
+function FishMesh({ color, opacity = 1, weight = INITIAL_WEIGHT }: { color: string; opacity?: number; weight?: number }) {
+  const scale = weightToScale(weight);
   return (
-    <group>
+    <group scale={[scale, scale, scale]}>
       {/* Body */}
       <mesh scale={[1.2, 0.7, 0.6]}>
         <sphereGeometry args={[1, 12, 8]} />
