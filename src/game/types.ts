@@ -7,6 +7,7 @@ export interface PlayerState {
   hp: number;
   kills: number;
   dead: boolean;
+  weight: number;
 }
 
 export interface FoodOrb {
