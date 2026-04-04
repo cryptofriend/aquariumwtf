@@ -3,6 +3,7 @@ import { getStore } from '../game/useGameStore';
 import { TANK_HALF, BITE_COOLDOWN_MS } from '../game/constants';
 import { supabase } from '@/integrations/supabase/client';
 import { biteRequest } from './TankScene';
+import { Move } from 'lucide-react';
 
 function Minimap() {
   const store = getStore();
