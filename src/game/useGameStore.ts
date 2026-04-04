@@ -29,6 +29,7 @@ export function createGameStore(): GameStore {
     name: '',
     color: FISH_COLORS[Math.floor(Math.random() * FISH_COLORS.length)],
     hp: MAX_HP,
+    weight: INITIAL_WEIGHT,
     kills: 0,
     dead: false,
     killerName: '',
