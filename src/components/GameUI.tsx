@@ -163,8 +163,8 @@ export default function GameUI() {
           <div key={i} className={`flex items-center gap-2 text-xs py-0.5 ${e.dead ? 'opacity-40 line-through' : ''}`}>
             <span className="text-zinc-400 w-4">{i + 1}</span>
             <span className="text-zinc-200 truncate flex-1">{e.name}</span>
+            <span className="text-amber-400">{e.weight}kg</span>
             <span className="text-red-400">{e.kills}🗡</span>
-            <span className="text-zinc-500">{e.hp}</span>
           </div>
         ))}
         {liveEntries.length === 0 && <div className="text-zinc-600 text-xs">No players yet</div>}
