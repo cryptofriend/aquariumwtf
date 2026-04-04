@@ -130,13 +130,77 @@ function Bubbles() {
   );
 }
 
+// Distance label that floats between player and target
+function DistanceLabel({ targetPos, distance }: { targetPos: THREE.Vector3; distance: number }) {
+  const ref = useRef<THREE.Group>(null!);
+  const store = getStore();
+
+  useFrame(() => {
+    if (!ref.current) return;
+    // Position at midpoint between player and target
+    ref.current.position.lerpVectors(store.position, targetPos, 0.5);
+    ref.current.position.y += 1.5;
+  });
+
+  const color = distance < BITE_RANGE ? '#ff4444' : distance < 5 ? '#ffaa00' : '#88ccff';
+
+  return (
+    <group ref={ref}>
+      <Text fontSize={0.4} color={color} anchorX="center" anchorY="middle" font={undefined}>
+        {distance.toFixed(1)}m
+      </Text>
+    </group>
+  );
+}
+
+// Animated food orb being eaten (scales down + flies toward player)
+function EatingFoodOrb({ orb, onComplete }: { orb: EatingOrb; onComplete: () => void }) {
+  const ref = useRef<THREE.Group>(null!);
+  const completed = useRef(false);
+
+  useFrame(() => {
+    if (!ref.current || completed.current) return;
+    const store = getStore();
+    const elapsed = Date.now() - orb.startTime;
+    const progress = Math.min(elapsed / orb.duration, 1);
+
+    // Ease out
+    const ease = 1 - Math.pow(1 - progress, 3);
+
+    // Scale down
+    const scale = 1 - ease * 0.9;
+    ref.current.scale.setScalar(scale);
+
+    // Move toward player
+    tmpVec.set(orb.x, orb.y, orb.z);
+    ref.current.position.lerpVectors(tmpVec, store.position, ease);
+
+    // Spin faster
+    ref.current.rotation.y += 0.3;
+
+    if (progress >= 1 && !completed.current) {
+      completed.current = true;
+      onComplete();
+    }
+  });
+
+  return (
+    <group ref={ref} position={[orb.x, orb.y, orb.z]}>
+      <pointLight color="#22ff44" intensity={3} distance={4} />
+      <mesh>
+        <sphereGeometry args={[0.4, 8, 8]} />
+        <meshStandardMaterial color="#44ff44" emissive="#22ff00" emissiveIntensity={1.2} />
+      </mesh>
+    </group>
+  );
+}
+
 function FoodOrbs() {
   const ref = useRef<THREE.Group>(null!);
 
   useFrame(({ clock }) => {
     const store = getStore();
     if (!ref.current) return;
-    // Update positions
     ref.current.children.forEach((child, i) => {
       const f = store.food[i];
       if (!f) return;
@@ -145,7 +209,6 @@ function FoodOrbs() {
     });
   });
 
-  // Re-render when food count changes — we just do it in the parent
   const store = getStore();
 
   return (
