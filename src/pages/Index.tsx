@@ -3,8 +3,10 @@ import EntryScreen from '../components/EntryScreen';
 import DeathScreen from '../components/DeathScreen';
 import GameUI from '../components/GameUI';
 import Tank3D from '../components/Tank3D';
+import VirtualJoystick from '../components/VirtualJoystick';
 import { getStore, resetStore } from '../game/useGameStore';
 import { GamePhase } from '../game/types';
+import { useIsMobile } from '../hooks/use-mobile';
 
 export default function Index() {
   const [phase, setPhase] = useState<GamePhase>('entry');
