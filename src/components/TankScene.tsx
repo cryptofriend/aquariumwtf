@@ -319,7 +319,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         player_name: store.name,
         survival_seconds: survivalSecs,
         kills: store.kills,
-        weight: store.weight,
+        weight: store.maxWeight,
       } as any).then(({ error }) => {
         if (error) console.error('[Aquarium] Failed to save score:', error);
       });
@@ -491,7 +491,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
             player_name: store.name,
             survival_seconds: survivalSecs,
             kills: store.kills,
-            weight: store.weight,
+            weight: store.maxWeight,
           })], { type: 'application/json' })
         );
       }
@@ -598,6 +598,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
           });
 
           store.weight = roundWeight(store.weight + biteAmount);
+          store.maxWeight = Math.max(store.maxWeight, store.weight);
           if (victim && !victim.dead && nextVictimWeight <= 0) store.kills++;
           broadcastState();
           toast(`🦷 Bit ${n.name}! (+${biteAmount.toFixed(1)}kg)`);
@@ -615,6 +616,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         if (dist < 2.2 && consumeFood(f.id)) {
           setEatingOrbs(prev => [...prev, { id: f.id, x: f.x, y: f.y, z: f.z, startTime: Date.now(), duration: 400 }]);
           store.weight = Math.round((store.weight + FOOD_WEIGHT) * 100) / 100;
+          store.maxWeight = Math.max(store.maxWeight, store.weight);
           void channelRef.current?.send({
             type: 'broadcast',
             event: 'food-eaten',
