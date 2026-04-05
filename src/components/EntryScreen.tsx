@@ -11,22 +11,18 @@ export default function EntryScreen({ onEnter }: Props) {
 
   useEffect(() => {
     // Subscribe to presence on the shared channel to get live fish count
-    const gameChannel = supabase.channel('aquarium-peek', {
-      config: { presence: { key: 'peek_' + Math.random().toString(36).slice(2) } },
-    });
+    const channel = supabase.channel('aquarium-live');
 
     const updateCount = () => {
-      const state = gameChannel.presenceState();
-      // Don't count our own peek presence
-      const keys = Object.keys(state).filter(k => !k.startsWith('peek_'));
-      setFishCount(keys.length);
+      const state = channel.presenceState();
+      setFishCount(Object.keys(state).length);
     };
 
-    gameChannel
+    channel
       .on('presence', { event: 'sync' }, updateCount)
       .subscribe();
 
-    return () => { gameChannel.unsubscribe(); };
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   return (
