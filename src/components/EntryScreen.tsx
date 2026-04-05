@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Props {
   onEnter: (name: string) => void;
@@ -6,6 +7,23 @@ interface Props {
 
 export default function EntryScreen({ onEnter }: Props) {
   const [name, setName] = useState('');
+  const [fishCount, setFishCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    // Subscribe to presence on the shared channel to get live fish count
+    const channel = supabase.channel('aquarium-live');
+
+    const updateCount = () => {
+      const state = channel.presenceState();
+      setFishCount(Object.keys(state).length);
+    };
+
+    channel
+      .on('presence', { event: 'sync' }, updateCount)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center"
@@ -14,7 +32,15 @@ export default function EntryScreen({ onEnter }: Props) {
       <h1 className="text-5xl font-mono font-bold text-purple-400 mb-2 tracking-tight">
         Aquarium
       </h1>
-      <p className="text-zinc-500 font-mono text-sm mb-8"><p className="text-zinc-500 font-mono text-sm mb-8">The Hunger Fish</p></p>
+      <p className="text-zinc-500 font-mono text-sm mb-2">The Hunger Fish</p>
+
+      {fishCount !== null && (
+        <div className="flex items-center gap-2 text-zinc-400 font-mono text-sm mb-6">
+          <span>🐟</span>
+          <span className="text-purple-300 font-bold">{fishCount}</span>
+          <span>{fishCount === 1 ? 'fish' : 'fish'} in the tank</span>
+        </div>
+      )}
 
       <input
         autoFocus
