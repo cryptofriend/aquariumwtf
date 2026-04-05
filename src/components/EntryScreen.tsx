@@ -11,13 +11,10 @@ export default function EntryScreen({ onEnter }: Props) {
 
   useEffect(() => {
     // Subscribe to presence on the shared channel to get live fish count
-    const channel = supabase.channel('aquarium-lobby-peek', {
-      config: { presence: { key: '_lobby_peek_' + Math.random().toString(36).slice(2) } },
-    });
+    const channel = supabase.channel('aquarium-live');
 
     const updateCount = () => {
       const state = channel.presenceState();
-      // Each presence key is a player
       setFishCount(Object.keys(state).length);
     };
 
