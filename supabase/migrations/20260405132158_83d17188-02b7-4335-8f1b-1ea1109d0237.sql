@@ -1,0 +1,1 @@
+ALTER TABLE public.leaderboard ALTER COLUMN weight TYPE numeric(10,2);
