@@ -499,8 +499,8 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
-      channel.unsubscribe();
-      biteChannel.unsubscribe();
+      supabase.removeChannel(channel);
+      supabase.removeChannel(biteChannel);
       window.removeEventListener('beforeunload', handleBeforeUnload);
       if (deathTimeout.current) clearTimeout(deathTimeout.current);
     };
