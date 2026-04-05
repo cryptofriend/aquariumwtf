@@ -229,7 +229,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
   const lastBroadcast = useRef(0);
   const lastFoodSpawn = useRef(0);
   const channelRef = useRef<any>(null);
-  
+
   const deathTimeout = useRef<number | null>(null);
   const [eatingOrbs, setEatingOrbs] = useState<EatingOrb[]>([]);
   const [proximities, setProximities] = useState<{ id: string; pos: THREE.Vector3; dist: number }[]>([]);
@@ -237,8 +237,24 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
   const proximityRef = useRef<{ id: string; pos: THREE.Vector3; dist: number }[]>([]);
   const lastProximityUpdate = useRef(0);
   const isWorldHostRef = useRef(false);
+  const seenBitesRef = useRef<Map<string, number>>(new Map());
 
   const bumpScene = useCallback(() => setSceneVersion(v => v + 1), []);
+
+  const roundWeight = useCallback((value: number) => {
+    return Math.round(Math.max(0, value) * 100) / 100;
+  }, []);
+
+  const rememberBite = useCallback((biteId: string) => {
+    const now = Date.now();
+    const seen = seenBitesRef.current;
+    seen.set(biteId, now);
+
+    const cutoff = now - 15000;
+    for (const [id, timestamp] of seen) {
+      if (timestamp < cutoff) seen.delete(id);
+    }
+  }, []);
 
   const upsertRemote = useCallback((id: string, p: PlayerState) => {
     getStore().remotePlayers.set(id, p);
@@ -281,6 +297,37 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       } satisfies PlayerBroadcastState,
     });
   }, []);
+
+  const applyIncomingBite = useCallback((payload: { biteId?: string; targetId?: string; attackerName?: string; damage?: number } | null | undefined, requireTargetId = false) => {
+    const store = getStore();
+    if (!payload?.biteId) return;
+    if (requireTargetId && payload.targetId !== uid) return;
+    if (seenBitesRef.current.has(payload.biteId) || store.dead) return;
+
+    rememberBite(payload.biteId);
+
+    const biteAmount = Math.max(0.1, Number(payload.damage) || 0.1);
+    store.weight = roundWeight(store.weight - biteAmount);
+    store.flashUntil = Date.now() + 300;
+    toast.error(`Bitten by ${payload.attackerName || 'Unknown'}! -${biteAmount.toFixed(1)}kg`);
+
+    if (store.weight <= 0 && !store.dead) {
+      store.dead = true;
+      store.killerName = payload.attackerName || 'Unknown';
+      const survivalSecs = store.spawnTime > 0 ? Math.floor((Date.now() - store.spawnTime) / 1000) : 0;
+      supabase.from('leaderboard').insert({
+        player_name: store.name,
+        survival_seconds: survivalSecs,
+        kills: store.kills,
+        weight: store.weight,
+      } as any).then(({ error }) => {
+        if (error) console.error('[Aquarium] Failed to save score:', error);
+      });
+      deathTimeout.current = window.setTimeout(() => { store.phase = 'dead'; }, DEATH_DELAY_MS);
+    }
+
+    broadcastState();
+  }, [broadcastState, rememberBite, roundWeight]);
 
   const kelpPositions = useMemo<[number, number, number][]>(() => getSharedKelpPositions(), []);
 
@@ -400,28 +447,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       })
       .on('broadcast', { event: 'bite' }, ({ payload }) => {
         console.log('[Aquarium] Bite event received:', JSON.stringify(payload), 'myUid:', uid);
-        if (!payload || payload.targetId !== uid) return;
-        if (store.dead) return;
-        const biteAmount = payload.damage || 0.1;
-        store.weight = Math.round(Math.max(0, store.weight - biteAmount) * 100) / 100;
-        console.log('[Aquarium] Weight reduced to:', store.weight);
-        store.flashUntil = Date.now() + 300;
-        toast.error(`Bitten by ${payload.attackerName}! -${biteAmount.toFixed(1)}kg`);
-
-        if (store.weight <= 0 && !store.dead) {
-          store.dead = true;
-          store.killerName = payload.attackerName || 'Unknown';
-          const survivalSecs = store.spawnTime > 0 ? Math.floor((Date.now() - store.spawnTime) / 1000) : 0;
-          supabase.from('leaderboard').insert({
-            player_name: store.name,
-            survival_seconds: survivalSecs,
-            kills: store.kills,
-            weight: store.weight,
-          } as any).then(({ error }) => {
-            if (error) console.error('[Aquarium] Failed to save score:', error);
-          });
-          deathTimeout.current = window.setTimeout(() => { store.phase = 'dead'; }, DEATH_DELAY_MS);
-        }
+        applyIncomingBite(payload as { biteId?: string; targetId?: string; attackerName?: string; damage?: number }, true);
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
@@ -452,27 +478,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
     biteChannel
       .on('broadcast', { event: 'bite' }, ({ payload }) => {
         console.log('[Aquarium] Bite received on personal channel:', JSON.stringify(payload));
-        if (store.dead) return;
-        const biteAmount = payload.damage || 0.1;
-        store.weight = Math.round(Math.max(0, store.weight - biteAmount) * 100) / 100;
-        console.log('[Aquarium] Weight reduced to:', store.weight);
-        store.flashUntil = Date.now() + 300;
-        toast.error(`Bitten by ${payload.attackerName}! -${biteAmount.toFixed(1)}kg`);
-
-        if (store.weight <= 0 && !store.dead) {
-          store.dead = true;
-          store.killerName = payload.attackerName || 'Unknown';
-          const survivalSecs = store.spawnTime > 0 ? Math.floor((Date.now() - store.spawnTime) / 1000) : 0;
-          supabase.from('leaderboard').insert({
-            player_name: store.name,
-            survival_seconds: survivalSecs,
-            kills: store.kills,
-            weight: store.weight,
-          } as any).then(({ error }) => {
-            if (error) console.error('[Aquarium] Failed to save score:', error);
-          });
-          deathTimeout.current = window.setTimeout(() => { store.phase = 'dead'; }, DEATH_DELAY_MS);
-        }
+        applyIncomingBite(payload as { biteId?: string; targetId?: string; attackerName?: string; damage?: number });
       })
       .subscribe();
 
@@ -498,7 +504,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       if (deathTimeout.current) clearTimeout(deathTimeout.current);
     };
-  }, []);
+  }, [addFood, applyIncomingBite, broadcastState, bumpScene, consumeFood, replaceFood, upsertRemote]);
 
   // Game loop
   useFrame((_, delta) => {
@@ -563,23 +569,38 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
           const victim = store.remotePlayers.get(n.key);
           const victimWeight = victim?.weight ?? 1;
           const rawBite = Math.max(0.1, store.weight * 0.1);
-          const biteAmount = Math.min(rawBite, victimWeight); // can't take more than victim has
-          console.log('[Aquarium] Sending bite to targetId:', n.key, 'damage:', biteAmount, 'victimWeight:', victimWeight);
-          // Send on shared channel
-          channelRef.current?.send({
+          const biteAmount = Math.min(rawBite, victimWeight);
+          const biteId = crypto.randomUUID();
+          const nextVictimWeight = roundWeight(victimWeight - biteAmount);
+
+          console.log('[Aquarium] Sending bite to targetId:', n.key, 'damage:', biteAmount, 'victimWeight:', victimWeight, 'biteId:', biteId);
+
+          if (victim) {
+            upsertRemote(n.key, {
+              ...victim,
+              weight: nextVictimWeight,
+              dead: victim.dead || nextVictimWeight <= 0,
+            });
+          }
+
+          const bitePayload = { biteId, targetId: n.key, attackerName: store.name, damage: biteAmount };
+
+          void channelRef.current?.send({
             type: 'broadcast',
             event: 'bite',
-            payload: { targetId: n.key, attackerName: store.name, damage: biteAmount },
+            payload: bitePayload,
           });
-          // Also send on victim's personal channel for reliability
-          supabase.channel(`bites-${n.key}`).send({
+
+          void supabase.channel(`bites-${n.key}`).send({
             type: 'broadcast',
             event: 'bite',
-            payload: { attackerName: store.name, damage: biteAmount },
+            payload: bitePayload,
           });
-          store.weight = Math.round((store.weight + biteAmount) * 100) / 100;
+
+          store.weight = roundWeight(store.weight + biteAmount);
+          if (victim && !victim.dead && nextVictimWeight <= 0) store.kills++;
+          broadcastState();
           toast(`🦷 Bit ${n.name}! (+${biteAmount.toFixed(1)}kg)`);
-          if (victimWeight - biteAmount <= 0) store.kills++;
         } else {
           toast('No fish in range!', { duration: 1000 });
         }
