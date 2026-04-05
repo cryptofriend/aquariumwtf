@@ -10,17 +10,29 @@ export default function EntryScreen({ onEnter }: Props) {
   const [fishCount, setFishCount] = useState<number | null>(null);
 
   useEffect(() => {
-    // Subscribe to presence on the shared channel to get live fish count
-    const channel = supabase.channel('aquarium-entry-presence');
-
-    const updateCount = () => {
-      const state = channel.presenceState();
-      setFishCount(Object.keys(state).length);
-    };
+    // Use broadcast to ask active players for a headcount
+    const channel = supabase.channel('aquarium-lobby');
 
     channel
-      .on('presence', { event: 'sync' }, updateCount)
-      .subscribe();
+      .on('broadcast', { event: 'headcount' }, (payload) => {
+        if (payload.payload?.count !== undefined) {
+          setFishCount(payload.payload.count);
+        }
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          // Poll active player count from the game channel's presence
+          const gameChannel = supabase.channel('aquarium-live-readonly');
+          gameChannel
+            .on('presence', { event: 'sync' }, () => {
+              const state = gameChannel.presenceState();
+              setFishCount(Object.keys(state).length);
+            })
+            .subscribe();
+
+          return () => { supabase.removeChannel(gameChannel); };
+        }
+      });
 
     return () => { supabase.removeChannel(channel); };
   }, []);
