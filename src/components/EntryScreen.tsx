@@ -10,8 +10,7 @@ export default function EntryScreen({ onEnter }: Props) {
   const [fishCount, setFishCount] = useState<number | null>(null);
 
   useEffect(() => {
-    // Subscribe to presence on the shared channel to get live fish count
-    const channel = supabase.channel('aquarium-live');
+    const channel = supabase.channel('aquarium-headcount');
 
     const updateCount = () => {
       const state = channel.presenceState();
@@ -20,7 +19,11 @@ export default function EntryScreen({ onEnter }: Props) {
 
     channel
       .on('presence', { event: 'sync' }, updateCount)
-      .subscribe();
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ joined: Date.now() });
+        }
+      });
 
     return () => { supabase.removeChannel(channel); };
   }, []);
