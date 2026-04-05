@@ -11,24 +11,22 @@ export default function EntryScreen({ onEnter }: Props) {
 
   useEffect(() => {
     // Subscribe to presence on the shared channel to get live fish count
-    // Use a read-only presence subscription to count active players
-    const peekId = '_peek_' + Math.random().toString(36).slice(2);
-    const channel = supabase.channel('aquarium-live:peek-' + peekId);
-
-    // We can't peek at another channel's presence, so we poll the presence via broadcast
-    // Instead, use a simple approach: subscribe to the same channel just to read presence
-    const gameChannel = supabase.channel('aquarium-live');
+    const gameChannel = supabase.channel('aquarium-peek', {
+      config: { presence: { key: 'peek_' + Math.random().toString(36).slice(2) } },
+    });
 
     const updateCount = () => {
       const state = gameChannel.presenceState();
-      setFishCount(Object.keys(state).length);
+      // Don't count our own peek presence
+      const keys = Object.keys(state).filter(k => !k.startsWith('peek_'));
+      setFishCount(keys.length);
     };
 
     gameChannel
       .on('presence', { event: 'sync' }, updateCount)
       .subscribe();
 
-    return () => { channel.unsubscribe(); };
+    return () => { gameChannel.unsubscribe(); };
   }, []);
 
   return (
