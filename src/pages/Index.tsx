@@ -40,7 +40,7 @@ export default function Index() {
       if (store.phase === 'dead' && phase !== 'dead') {
         setKillerName(store.killerName);
         setFinalKills(store.kills);
-        setFinalWeight(store.weight);
+        setFinalWeight(store.maxWeight);
         setPhase('dead');
       }
     }, 200);
