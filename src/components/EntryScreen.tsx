@@ -11,7 +11,7 @@ export default function EntryScreen({ onEnter }: Props) {
 
   useEffect(() => {
     // Subscribe to presence on the shared channel to get live fish count
-    const channel = supabase.channel('aquarium-live');
+    const channel = supabase.channel('aquarium-entry-presence');
 
     const updateCount = () => {
       const state = channel.presenceState();
