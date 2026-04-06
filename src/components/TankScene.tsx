@@ -340,6 +340,15 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
     broadcastState();
   }, [broadcastState, rememberBite, roundWeight]);
 
+  // Keep callbacksRef in sync
+  callbacksRef.current.bumpScene = bumpScene;
+  callbacksRef.current.upsertRemote = upsertRemote;
+  callbacksRef.current.addFood = addFood;
+  callbacksRef.current.replaceFood = replaceFood;
+  callbacksRef.current.consumeFood = consumeFood;
+  callbacksRef.current.broadcastState = broadcastState;
+  callbacksRef.current.applyIncomingBite = applyIncomingBite;
+
   const kelpPositions = useMemo<[number, number, number][]>(() => getSharedKelpPositions(), []);
 
   // Keyboard
