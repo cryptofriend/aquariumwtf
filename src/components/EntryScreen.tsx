@@ -16,13 +16,6 @@ export default function EntryScreen({ onEnter }: Props) {
       </h1>
       <p className="text-zinc-500 font-mono text-sm mb-2">The Hunger Fish</p>
 
-      {fishCount !== null && (
-        <div className="flex items-center gap-2 text-zinc-400 font-mono text-sm mb-6">
-          <span>🐟</span>
-          <span className="text-purple-300 font-bold">{fishCount}</span>
-          <span>fish in the tank</span>
-        </div>
-      )}
 
       <input
         autoFocus
