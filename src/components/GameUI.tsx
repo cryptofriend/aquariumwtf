@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getStore } from '../game/useGameStore';
 import { TANK_HALF, BITE_COOLDOWN_MS } from '../game/constants';
-import { supabase } from '@/integrations/supabase/client';
+
 import { biteRequest } from './TankScene';
 import { Move, ArrowUpDown } from 'lucide-react';
 
@@ -83,24 +83,8 @@ function Minimap() {
 
 export default function GameUI() {
   const [, setTick] = useState(0);
-  const [topScores, setTopScores] = useState<{ player_name: string; weight: number; kills: number }[]>([]);
-
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 200);
-    return () => clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    const fetchScores = async () => {
-      const { data } = await supabase
-        .from('leaderboard')
-        .select('player_name, weight, kills')
-        .order('weight', { ascending: false })
-        .limit(5);
-      if (data) setTopScores(data as any);
-    };
-    fetchScores();
-    const id = setInterval(fetchScores, 30000);
     return () => clearInterval(id);
   }, []);
 
@@ -129,20 +113,6 @@ export default function GameUI() {
           </div>
         ))}
         {liveEntries.length === 0 && <div className="text-zinc-600 text-xs">No players yet</div>}
-
-        {topScores.length > 0 && (
-          <>
-            <div className="text-amber-400 text-xs font-bold mt-3 mb-1 uppercase tracking-wider border-t border-zinc-700 pt-2">🏆 Best Runs</div>
-            {topScores.map((s, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs py-0.5">
-                <span className="text-zinc-400 w-4">{i + 1}</span>
-                <span className="text-zinc-200 truncate flex-1">{s.player_name}</span>
-                <span className="text-amber-400">{s.weight}kg</span>
-                <span className="text-red-400">{s.kills}🗡</span>
-              </div>
-            ))}
-          </>
-        )}
       </div>
 
       {/* Kill counter + Weight + Immunity */}
