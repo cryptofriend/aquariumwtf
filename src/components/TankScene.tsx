@@ -522,7 +522,6 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
 
     return () => {
       supabase.removeChannel(channel);
-      supabase.removeChannel(lobbyChannel);
       supabase.removeChannel(biteChannel);
       window.removeEventListener('beforeunload', handleBeforeUnload);
       if (deathTimeout.current) clearTimeout(deathTimeout.current);
