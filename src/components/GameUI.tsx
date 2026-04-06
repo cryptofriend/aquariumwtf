@@ -138,8 +138,8 @@ export default function GameUI({ phase }: { phase: GamePhase }) {
 
       <Minimap />
 
-      {/* Game Rules button near radar */}
-      <div className="absolute bottom-20 right-[calc(1rem+180px)] pointer-events-auto">
+      {/* Info & Mobile toggle buttons near radar */}
+      <div className="absolute bottom-20 right-[calc(1rem+180px)] pointer-events-auto flex flex-col gap-2">
         <button
           onClick={() => setShowRules(s => !s)}
           className="bg-black/60 backdrop-blur-sm border border-zinc-700 rounded-lg p-2 hover:bg-black/80 transition-colors"
@@ -147,6 +147,15 @@ export default function GameUI({ phase }: { phase: GamePhase }) {
         >
           <Info size={18} className="text-zinc-300" />
         </button>
+        {isMobile && phase === 'playing' && (
+          <button
+            onClick={() => setShowMobileControls(s => !s)}
+            className={`bg-black/60 backdrop-blur-sm border rounded-lg p-2 hover:bg-black/80 transition-colors ${showMobileControls ? 'border-purple-500' : 'border-zinc-700'}`}
+            title="Toggle Mobile Controls"
+          >
+            <Smartphone size={18} className={showMobileControls ? 'text-purple-400' : 'text-zinc-300'} />
+          </button>
+        )}
       </div>
 
       {/* Rules panel */}
