@@ -10,8 +10,9 @@ export default function EntryScreen({ onEnter }: Props) {
   const [fishCount, setFishCount] = useState<number | null>(null);
 
   useEffect(() => {
-    // Subscribe to the actual game channel to count in-game players (read-only, no track)
-    const channel = supabase.channel('aquarium-live');
+    // Use a dedicated read-only channel to observe game presence
+    // This MUST be a different channel name from 'aquarium-live' to avoid conflicts
+    const channel = supabase.channel('lobby-observer');
 
     const updateCount = () => {
       const state = channel.presenceState();
@@ -39,7 +40,7 @@ export default function EntryScreen({ onEnter }: Props) {
         <div className="flex items-center gap-2 text-zinc-400 font-mono text-sm mb-6">
           <span>🐟</span>
           <span className="text-purple-300 font-bold">{fishCount}</span>
-          <span>{fishCount === 1 ? 'fish' : 'fish'} in the tank</span>
+          <span>fish in the tank</span>
         </div>
       )}
 

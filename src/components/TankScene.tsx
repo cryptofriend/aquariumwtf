@@ -239,6 +239,17 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
   const isWorldHostRef = useRef(false);
   const seenBitesRef = useRef<Map<string, number>>(new Map());
 
+  // Store callbacks in refs to avoid useEffect dependency churn
+  const callbacksRef = useRef({
+    bumpScene: () => {},
+    upsertRemote: (_id: string, _p: PlayerState) => {},
+    addFood: (_food: FoodOrb): boolean => false,
+    replaceFood: (_foods: FoodOrb[]) => {},
+    consumeFood: (_foodId: string): boolean => false,
+    broadcastState: () => {},
+    applyIncomingBite: (_payload: any, _requireTargetId?: boolean) => {},
+  });
+
   const bumpScene = useCallback(() => setSceneVersion(v => v + 1), []);
 
   const roundWeight = useCallback((value: number) => {
@@ -329,6 +340,15 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
     broadcastState();
   }, [broadcastState, rememberBite, roundWeight]);
 
+  // Keep callbacksRef in sync
+  callbacksRef.current.bumpScene = bumpScene;
+  callbacksRef.current.upsertRemote = upsertRemote;
+  callbacksRef.current.addFood = addFood;
+  callbacksRef.current.replaceFood = replaceFood;
+  callbacksRef.current.consumeFood = consumeFood;
+  callbacksRef.current.broadcastState = broadcastState;
+  callbacksRef.current.applyIncomingBite = applyIncomingBite;
+
   const kelpPositions = useMemo<[number, number, number][]>(() => getSharedKelpPositions(), []);
 
   // Keyboard
@@ -364,9 +384,10 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
     return () => { window.removeEventListener('mousemove', mh); window.removeEventListener('touchmove', th); };
   }, [camera]);
 
-  // Realtime channels
+  // Realtime channels — empty deps so this runs exactly once
   useEffect(() => {
     const store = getStore();
+    const cbs = callbacksRef.current;
     const channel = supabase.channel('aquarium-live', {
       config: { presence: { key: uid }, broadcast: { self: true, ack: true } },
     });
@@ -402,12 +423,12 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
           if (!currentIds.has(key)) store.remotePlayers.delete(key);
         });
         resolveHost();
-        bumpScene();
+        callbacksRef.current.bumpScene();
       })
       .on('presence', { event: 'join' }, ({ key, newPresences }) => {
         if (key === uid) return;
         const p = (newPresences as any[])?.[0];
-        if (p) upsertRemote(key, parsePlayer(p));
+        if (p) callbacksRef.current.upsertRemote(key, parsePlayer(p));
         resolveHost();
         toast(`🐟 ${p?.name || 'Unknown fish'} joined!`, { duration: 3000 });
       })
@@ -415,13 +436,13 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         const p = (leftPresences as any[])?.[0];
         store.remotePlayers.delete(key);
         resolveHost();
-        bumpScene();
+        callbacksRef.current.bumpScene();
         toast(`💨 ${p?.name || 'A fish'} left`, { duration: 3000 });
       })
       .on('broadcast', { event: 'player-state' }, ({ payload }) => {
         const p = payload as PlayerBroadcastState;
         if (!p || p.id === uid) return;
-        upsertRemote(p.id, parsePlayer(p));
+        callbacksRef.current.upsertRemote(p.id, parsePlayer(p));
       })
       .on('broadcast', { event: 'world-sync-request' }, ({ payload }) => {
         const req = payload as WorldSyncRequestPayload;
@@ -435,19 +456,19 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       .on('broadcast', { event: 'world-sync-response' }, ({ payload }) => {
         const res = payload as WorldSyncResponsePayload;
         if (res?.targetId !== uid || !Array.isArray(res.foods)) return;
-        replaceFood(res.foods);
+        callbacksRef.current.replaceFood(res.foods);
       })
       .on('broadcast', { event: 'food-spawned' }, ({ payload }) => {
         const e = payload as FoodSpawnPayload;
-        if (e?.food) addFood(e.food);
+        if (e?.food) callbacksRef.current.addFood(e.food);
       })
       .on('broadcast', { event: 'food-eaten' }, ({ payload }) => {
         const e = payload as FoodEatenPayload;
-        if (e?.foodId) consumeFood(e.foodId);
+        if (e?.foodId) callbacksRef.current.consumeFood(e.foodId);
       })
       .on('broadcast', { event: 'bite' }, ({ payload }) => {
         console.log('[Aquarium] Bite event received:', JSON.stringify(payload), 'myUid:', uid);
-        applyIncomingBite(payload as { biteId?: string; targetId?: string; attackerName?: string; damage?: number }, true);
+        callbacksRef.current.applyIncomingBite(payload as { biteId?: string; targetId?: string; attackerName?: string; damage?: number }, true);
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
@@ -462,7 +483,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
             dead: store.dead,
           });
           resolveHost();
-          broadcastState();
+          callbacksRef.current.broadcastState();
           void channel.send({
             type: 'broadcast',
             event: 'world-sync-request',
@@ -473,12 +494,20 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
 
     channelRef.current = channel;
 
+    // Also track on lobby-observer so EntryScreen can show player count
+    const lobbyChannel = supabase.channel('lobby-observer');
+    lobbyChannel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await lobbyChannel.track({ name: store.name, uid });
+      }
+    });
+
     // Per-player bite channel (redundant receiver for reliability)
     const biteChannel = supabase.channel(`bites-${uid}`);
     biteChannel
       .on('broadcast', { event: 'bite' }, ({ payload }) => {
         console.log('[Aquarium] Bite received on personal channel:', JSON.stringify(payload));
-        applyIncomingBite(payload as { biteId?: string; targetId?: string; attackerName?: string; damage?: number });
+        callbacksRef.current.applyIncomingBite(payload as { biteId?: string; targetId?: string; attackerName?: string; damage?: number });
       })
       .subscribe();
 
@@ -500,11 +529,13 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
 
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(lobbyChannel);
       supabase.removeChannel(biteChannel);
       window.removeEventListener('beforeunload', handleBeforeUnload);
       if (deathTimeout.current) clearTimeout(deathTimeout.current);
     };
-  }, [addFood, applyIncomingBite, broadcastState, bumpScene, consumeFood, replaceFood, upsertRemote]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Game loop
   useFrame((_, delta) => {
