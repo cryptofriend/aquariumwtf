@@ -83,6 +83,8 @@ function Minimap() {
 
 export default function GameUI() {
   const [, setTick] = useState(0);
+  const [showRules, setShowRules] = useState(false);
+
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 200);
     return () => clearInterval(id);
@@ -115,7 +117,7 @@ export default function GameUI() {
         {liveEntries.length === 0 && <div className="text-zinc-600 text-xs">No players yet</div>}
       </div>
 
-      {/* Kill counter + Weight + Immunity */}
+      {/* Kill counter + Weight */}
       {!store.spectate && (
         <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
           <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg px-4 py-2">
@@ -130,8 +132,52 @@ export default function GameUI() {
         </div>
       )}
 
-
       <Minimap />
+
+      {/* Game Rules button near radar */}
+      <div className="absolute bottom-20 right-[calc(1rem+180px)] pointer-events-auto">
+        <button
+          onClick={() => setShowRules(s => !s)}
+          className="bg-black/60 backdrop-blur-sm border border-zinc-700 rounded-lg p-2 hover:bg-black/80 transition-colors"
+          title="Game Rules"
+        >
+          <Info size={18} className="text-zinc-300" />
+        </button>
+      </div>
+
+      {/* Rules panel */}
+      {showRules && (
+        <div className="absolute bottom-36 right-4 pointer-events-auto bg-black/80 backdrop-blur-md border border-zinc-700 rounded-lg p-4 w-64">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-purple-400 text-xs font-bold uppercase tracking-wider">Game Rules</span>
+            <button onClick={() => setShowRules(false)} className="text-zinc-500 hover:text-zinc-300">
+              <X size={14} />
+            </button>
+          </div>
+          <ul className="text-zinc-300 text-[11px] space-y-1.5 list-disc list-inside">
+            <li>Swim with <span className="text-yellow-300">WASD</span>, rise/dive with <span className="text-yellow-300">Q/E</span></li>
+            <li>Move mouse to attract your fish</li>
+            <li>Get close to enemies and <span className="text-red-400">BITE</span> them</li>
+            <li>Each bite steals <span className="text-amber-400">10%</span> of your weight from them</li>
+            <li>Grow heavier to become the biggest fish</li>
+            <li>If your weight drops to 0, you die</li>
+            <li>Last fish swimming wins!</li>
+          </ul>
+        </div>
+      )}
+
+      {/* Bug Report */}
+      <div className="absolute bottom-4 left-4 pointer-events-auto">
+        <a
+          href="https://x.com/boogaav"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 bg-black/60 backdrop-blur-sm border border-zinc-700 rounded-lg px-3 py-2 hover:bg-black/80 transition-colors"
+        >
+          <Bug size={14} className="text-red-400" />
+          <span className="text-zinc-400 text-[10px] uppercase tracking-wider">Bug Report</span>
+        </a>
+      </div>
 
       {/* Bite + Nav controls */}
       {!store.spectate && !store.dead && (
