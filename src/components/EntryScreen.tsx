@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Props {
@@ -8,13 +8,24 @@ interface Props {
 export default function EntryScreen({ onEnter }: Props) {
   const [name, setName] = useState('');
   const [fishCount, setFishCount] = useState(0);
+  const [takenNames, setTakenNames] = useState<Set<string>>(new Set());
+  const [error, setError] = useState('');
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => {
     const channel = supabase.channel('lobby-stats');
+    channelRef.current = channel;
     channel
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
         setFishCount(Object.keys(state).length);
+        const names = new Set<string>();
+        Object.values(state).forEach((presences: any[]) => {
+          presences.forEach((p) => {
+            if (p.name) names.add(p.name.toLowerCase());
+          });
+        });
+        setTakenNames(names);
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
@@ -23,6 +34,19 @@ export default function EntryScreen({ onEnter }: Props) {
       });
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  const trimmed = name.trim();
+  const isTaken = trimmed.length > 0 && takenNames.has(trimmed.toLowerCase());
+
+  const handleEnter = () => {
+    if (!trimmed) return;
+    if (isTaken) {
+      setError('Name already taken!');
+      return;
+    }
+    channelRef.current?.track({ role: 'player', name: trimmed });
+    onEnter(trimmed);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center"
@@ -36,20 +60,22 @@ export default function EntryScreen({ onEnter }: Props) {
         🐟 {fishCount} fish swimming right now
       </p>
 
-
       <input
         autoFocus
         value={name}
-        onChange={e => setName(e.target.value)}
-        onKeyDown={e => e.key === 'Enter' && name.trim() && onEnter(name.trim())}
+        onChange={e => { setName(e.target.value); setError(''); }}
+        onKeyDown={e => e.key === 'Enter' && handleEnter()}
         placeholder="Name your agent..."
         maxLength={16}
-        className="w-72 px-4 py-3 rounded-lg bg-zinc-900/80 border border-zinc-700 text-zinc-100 font-mono text-center text-lg placeholder:text-zinc-600 focus:outline-none focus:border-purple-500 mb-4"
+        className={`w-72 px-4 py-3 rounded-lg bg-zinc-900/80 border ${isTaken ? 'border-red-500' : 'border-zinc-700'} text-zinc-100 font-mono text-center text-lg placeholder:text-zinc-600 focus:outline-none focus:border-purple-500 mb-1`}
       />
+      {isTaken && <p className="text-red-400 text-xs font-mono mb-2">⚠ This name is already in use</p>}
+      {error && !isTaken && <p className="text-red-400 text-xs font-mono mb-2">{error}</p>}
+      {!isTaken && !error && <div className="mb-3" />}
 
       <button
-        disabled={!name.trim()}
-        onClick={() => onEnter(name.trim())}
+        disabled={!trimmed || isTaken}
+        onClick={handleEnter}
         className="px-8 py-3 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-mono font-bold text-lg transition-colors"
       >
         Enter the Tank 🩸
