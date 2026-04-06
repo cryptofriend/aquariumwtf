@@ -3,7 +3,10 @@ import { getStore } from '../game/useGameStore';
 import { TANK_HALF, BITE_COOLDOWN_MS } from '../game/constants';
 
 import { biteRequest } from './TankScene';
-import { Move, ArrowUpDown, Bug, Info, X } from 'lucide-react';
+import { Move, ArrowUpDown, Bug, Info, X, Smartphone } from 'lucide-react';
+import { useIsMobile } from '../hooks/use-mobile';
+import VirtualJoystick from './VirtualJoystick';
+import { GamePhase } from '../game/types';
 
 function Minimap() {
   const store = getStore();
@@ -81,10 +84,11 @@ function Minimap() {
   );
 }
 
-export default function GameUI() {
+export default function GameUI({ phase }: { phase: GamePhase }) {
   const [, setTick] = useState(0);
   const [showRules, setShowRules] = useState(false);
-
+  const [showMobileControls, setShowMobileControls] = useState(true);
+  const isMobile = useIsMobile();
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 200);
     return () => clearInterval(id);
@@ -134,8 +138,8 @@ export default function GameUI() {
 
       <Minimap />
 
-      {/* Game Rules button near radar */}
-      <div className="absolute bottom-20 right-[calc(1rem+180px)] pointer-events-auto">
+      {/* Info & Mobile toggle buttons near radar */}
+      <div className="absolute bottom-20 right-[calc(1rem+180px)] pointer-events-auto flex flex-col gap-2">
         <button
           onClick={() => setShowRules(s => !s)}
           className="bg-black/60 backdrop-blur-sm border border-zinc-700 rounded-lg p-2 hover:bg-black/80 transition-colors"
@@ -143,6 +147,15 @@ export default function GameUI() {
         >
           <Info size={18} className="text-zinc-300" />
         </button>
+        {isMobile && phase === 'playing' && (
+          <button
+            onClick={() => setShowMobileControls(s => !s)}
+            className={`bg-black/60 backdrop-blur-sm border rounded-lg p-2 hover:bg-black/80 transition-colors ${showMobileControls ? 'border-purple-500' : 'border-zinc-700'}`}
+            title="Toggle Mobile Controls"
+          >
+            <Smartphone size={18} className={showMobileControls ? 'text-purple-400' : 'text-zinc-300'} />
+          </button>
+        )}
       </div>
 
       {/* Rules panel */}
@@ -202,6 +215,9 @@ export default function GameUI() {
           </div>
         </div>
       )}
+
+      {/* Mobile joystick */}
+      {isMobile && phase === 'playing' && showMobileControls && <VirtualJoystick />}
     </div>
   );
 }
