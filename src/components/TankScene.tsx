@@ -494,13 +494,6 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
 
     channelRef.current = channel;
 
-    // Also track on lobby-observer so EntryScreen can show player count
-    const lobbyChannel = supabase.channel('lobby-observer');
-    lobbyChannel.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await lobbyChannel.track({ name: store.name, uid });
-      }
-    });
 
     // Per-player bite channel (redundant receiver for reliability)
     const biteChannel = supabase.channel(`bites-${uid}`);

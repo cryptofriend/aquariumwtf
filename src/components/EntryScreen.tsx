@@ -12,7 +12,7 @@ export default function EntryScreen({ onEnter }: Props) {
   useEffect(() => {
     // Use a dedicated read-only channel to observe game presence
     // This MUST be a different channel name from 'aquarium-live' to avoid conflicts
-    const channel = supabase.channel('lobby-observer');
+    const channel = supabase.channel('aquarium-live');
 
     const updateCount = () => {
       const state = channel.presenceState();
