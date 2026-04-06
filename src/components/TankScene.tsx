@@ -239,6 +239,17 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
   const isWorldHostRef = useRef(false);
   const seenBitesRef = useRef<Map<string, number>>(new Map());
 
+  // Store callbacks in refs to avoid useEffect dependency churn
+  const callbacksRef = useRef({
+    bumpScene: () => {},
+    upsertRemote: (_id: string, _p: PlayerState) => {},
+    addFood: (_food: FoodOrb) => false,
+    replaceFood: (_foods: FoodOrb[]) => {},
+    consumeFood: (_foodId: string) => false,
+    broadcastState: () => {},
+    applyIncomingBite: (_payload: any, _requireTargetId?: boolean) => {},
+  });
+
   const bumpScene = useCallback(() => setSceneVersion(v => v + 1), []);
 
   const roundWeight = useCallback((value: number) => {
