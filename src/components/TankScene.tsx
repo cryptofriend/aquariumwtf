@@ -243,9 +243,9 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
   const callbacksRef = useRef({
     bumpScene: () => {},
     upsertRemote: (_id: string, _p: PlayerState) => {},
-    addFood: (_food: FoodOrb) => false,
+    addFood: (_food: FoodOrb): boolean => false,
     replaceFood: (_foods: FoodOrb[]) => {},
-    consumeFood: (_foodId: string) => false,
+    consumeFood: (_foodId: string): boolean => false,
     broadcastState: () => {},
     applyIncomingBite: (_payload: any, _requireTargetId?: boolean) => {},
   });
