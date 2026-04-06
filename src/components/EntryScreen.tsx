@@ -31,7 +31,10 @@ export default function EntryScreen({ onEnter }: Props) {
       <h1 className="text-5xl font-mono font-bold text-purple-400 mb-2 tracking-tight">
         Aquarium
       </h1>
-      <p className="text-zinc-500 font-mono text-sm mb-2">The Hunger Fish</p>
+      <p className="text-zinc-500 font-mono text-sm mb-1">The Hunger Fish</p>
+      <p className="text-emerald-400 font-mono text-sm mb-4 animate-pulse">
+        🐟 {fishCount} fish swimming right now
+      </p>
 
 
       <input
