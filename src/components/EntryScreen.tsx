@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useState } from 'react';
 
 interface Props {
   onEnter: (name: string) => void;
@@ -7,25 +6,6 @@ interface Props {
 
 export default function EntryScreen({ onEnter }: Props) {
   const [name, setName] = useState('');
-  const [fishCount, setFishCount] = useState<number | null>(null);
-
-  useEffect(() => {
-    // Use a dedicated read-only channel to observe game presence
-    // This MUST be a different channel name from 'aquarium-live' to avoid conflicts
-    const channel = supabase.channel('aquarium-live');
-
-    const updateCount = () => {
-      const state = channel.presenceState();
-      const count = Object.values(state).flat().length;
-      setFishCount(count);
-    };
-
-    channel
-      .on('presence', { event: 'sync' }, updateCount)
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, []);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center"
@@ -36,13 +16,6 @@ export default function EntryScreen({ onEnter }: Props) {
       </h1>
       <p className="text-zinc-500 font-mono text-sm mb-2">The Hunger Fish</p>
 
-      {fishCount !== null && (
-        <div className="flex items-center gap-2 text-zinc-400 font-mono text-sm mb-6">
-          <span>🐟</span>
-          <span className="text-purple-300 font-bold">{fishCount}</span>
-          <span>fish in the tank</span>
-        </div>
-      )}
 
       <input
         autoFocus
