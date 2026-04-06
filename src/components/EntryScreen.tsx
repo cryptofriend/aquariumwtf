@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Props {
   onEnter: (name: string) => void;
@@ -6,6 +7,22 @@ interface Props {
 
 export default function EntryScreen({ onEnter }: Props) {
   const [name, setName] = useState('');
+  const [fishCount, setFishCount] = useState(0);
+
+  useEffect(() => {
+    const channel = supabase.channel('lobby-stats');
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        setFishCount(Object.keys(state).length);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ role: 'observer' });
+        }
+      });
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center"
