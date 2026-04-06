@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Props {
   onEnter: (name: string) => void;
@@ -6,6 +7,22 @@ interface Props {
 
 export default function EntryScreen({ onEnter }: Props) {
   const [name, setName] = useState('');
+  const [fishCount, setFishCount] = useState(0);
+
+  useEffect(() => {
+    const channel = supabase.channel('lobby-stats');
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        setFishCount(Object.keys(state).length);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ role: 'observer' });
+        }
+      });
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center"
@@ -14,7 +31,10 @@ export default function EntryScreen({ onEnter }: Props) {
       <h1 className="text-5xl font-mono font-bold text-purple-400 mb-2 tracking-tight">
         Aquarium
       </h1>
-      <p className="text-zinc-500 font-mono text-sm mb-2">The Hunger Fish</p>
+      <p className="text-zinc-500 font-mono text-sm mb-1">The Hunger Fish</p>
+      <p className="text-emerald-400 font-mono text-sm mb-4 animate-pulse">
+        🐟 {fishCount} fish swimming right now
+      </p>
 
 
       <input
