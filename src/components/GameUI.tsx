@@ -215,6 +215,9 @@ export default function GameUI({ phase }: { phase: GamePhase }) {
           </div>
         </div>
       )}
+
+      {/* Mobile joystick */}
+      {isMobile && phase === 'playing' && showMobileControls && <VirtualJoystick />}
     </div>
   );
 }
