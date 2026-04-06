@@ -5,6 +5,7 @@ import { TANK_HALF, BITE_COOLDOWN_MS } from '../game/constants';
 import { biteRequest } from './TankScene';
 import { Move, ArrowUpDown, Bug, Info, X, Smartphone } from 'lucide-react';
 import { useIsMobile } from '../hooks/use-mobile';
+import GameChat from './GameChat';
 import VirtualJoystick from './VirtualJoystick';
 import { GamePhase } from '../game/types';
 
@@ -218,6 +219,9 @@ export default function GameUI({ phase }: { phase: GamePhase }) {
 
       {/* Mobile joystick */}
       {isMobile && phase === 'playing' && showMobileControls && <VirtualJoystick />}
+
+      {/* Chat */}
+      {phase === 'playing' && <GameChat />}
     </div>
   );
 }
