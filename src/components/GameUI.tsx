@@ -84,10 +84,11 @@ function Minimap() {
   );
 }
 
-export default function GameUI() {
+export default function GameUI({ phase }: { phase: GamePhase }) {
   const [, setTick] = useState(0);
   const [showRules, setShowRules] = useState(false);
-
+  const [showMobileControls, setShowMobileControls] = useState(true);
+  const isMobile = useIsMobile();
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 200);
     return () => clearInterval(id);
