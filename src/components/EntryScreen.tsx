@@ -11,7 +11,7 @@ export default function EntryScreen({ onEnter }: Props) {
 
   useEffect(() => {
     // Subscribe to the actual game channel to count in-game players (read-only, no track)
-    const channel = supabase.channel('aquarium-live-observer');
+    const channel = supabase.channel('aquarium-live');
 
     const updateCount = () => {
       const state = channel.presenceState();
