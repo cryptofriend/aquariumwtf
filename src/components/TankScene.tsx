@@ -2,6 +2,7 @@ import { useRef, useMemo, useEffect, useCallback, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import * as THREE from 'three';
+import Portal from './Portal';
 import { getStore } from '../game/useGameStore';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -745,6 +746,24 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       {kelpPositions.map((pos, i) => <Kelp key={i} position={pos} />)}
       <Bubbles />
       <FoodOrbs />
+
+      {/* Vibe Jam Portal — exit portal */}
+      <Portal
+        position={[0, 0, 0]}
+        label="🌀 Vibe Jam Portal"
+        targetUrl="https://jam.pieter.com/portal/2026"
+        color="#8b5cf6"
+      />
+
+      {/* Return portal — only if player came from another game */}
+      {store.portalRef && (
+        <Portal
+          position={[0, 0, -TANK_HALF.z + 5]}
+          label="🔙 Return Portal"
+          targetUrl={store.portalRef}
+          color="#22d3ee"
+        />
+      )}
 
       {!spectate && (
         <group ref={playerRef} position={[store.position.x, store.position.y, store.position.z]}>

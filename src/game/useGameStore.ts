@@ -20,6 +20,7 @@ export interface GameStore {
   spectate: boolean;
   spawnTime: number;
   immuneUntil: number;
+  portalRef: string | null;
 }
 
 function createGameStore(): GameStore {
@@ -45,6 +46,7 @@ function createGameStore(): GameStore {
     spectate: false,
     spawnTime: 0,
     immuneUntil: 0,
+    portalRef: null,
   };
 }
 
