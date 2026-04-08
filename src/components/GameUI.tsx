@@ -147,6 +147,17 @@ export default function GameUI({ phase }: { phase: GamePhase }) {
       {/* Info & Mobile toggle buttons near radar */}
       <div className="absolute bottom-20 right-[calc(1rem+180px)] pointer-events-auto flex flex-col gap-2">
         <button
+          onClick={() => {
+            setLightMode(m => !m);
+            document.documentElement.classList.toggle('light-aquarium', !lightMode);
+            window.dispatchEvent(new CustomEvent('aquarium-light-mode', { detail: !lightMode }));
+          }}
+          className="bg-black/60 backdrop-blur-sm border border-zinc-700 rounded-lg p-2 hover:bg-black/80 transition-colors"
+          title="Toggle Light Mode"
+        >
+          {lightMode ? <Moon size={18} className="text-blue-300" /> : <Sun size={18} className="text-yellow-300" />}
+        </button>
+        <button
           onClick={() => setShowRules(s => !s)}
           className="bg-black/60 backdrop-blur-sm border border-zinc-700 rounded-lg p-2 hover:bg-black/80 transition-colors"
           title="Game Rules"
