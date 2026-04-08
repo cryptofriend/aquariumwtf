@@ -1,11 +1,11 @@
-export const BITE_RANGE = 3.2;
+export const BITE_RANGE = 8;
 export const BITE_COOLDOWN_MS = 1200;
 export const FOOD_WEIGHT = 1;
 export const FOOD_SPAWN_MS = 3500;
-export const MAX_FOOD = 14;
+export const MAX_FOOD = 60;
 export const BROADCAST_MS = 60;
-export const TANK_HALF = { x: 24, y: 10, z: 20 };
-export const MAX_SPEED = 14;
+export const TANK_HALF = { x: 240, y: 100, z: 200 };
+export const MAX_SPEED = 60;
 export const DAMPING = 0.86;
 export const MOUSE_LERP = 0.03;
 export const REMOTE_LERP = 0.12;
