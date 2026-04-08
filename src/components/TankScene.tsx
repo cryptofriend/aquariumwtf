@@ -717,18 +717,25 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
   });
 
   const store = getStore();
+  const [lightMode, setLightMode] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: Event) => setLightMode((e as CustomEvent).detail);
+    window.addEventListener('aquarium-light-mode', handler);
+    return () => window.removeEventListener('aquarium-light-mode', handler);
+  }, []);
 
   return (
     <>
-      <ambientLight intensity={0.3} />
-      <directionalLight position={[100, 150, 100]} intensity={0.5} />
-      <pointLight position={[-TANK_HALF.x, 0, 0]} color="#ff4444" intensity={1.5} distance={500} />
-      <pointLight position={[TANK_HALF.x, 0, 0]} color="#4444ff" intensity={1.5} distance={500} />
-      <fog attach="fog" args={['#050510', 100, 500]} />
+      <ambientLight intensity={lightMode ? 0.8 : 0.3} />
+      <directionalLight position={[100, 150, 100]} intensity={lightMode ? 1.2 : 0.5} />
+      <pointLight position={[-TANK_HALF.x, 0, 0]} color={lightMode ? '#66aaff' : '#ff4444'} intensity={1.5} distance={500} />
+      <pointLight position={[TANK_HALF.x, 0, 0]} color={lightMode ? '#88ccff' : '#4444ff'} intensity={1.5} distance={500} />
+      <fog attach="fog" args={[lightMode ? '#a8d8ea' : '#050510', 100, 500]} />
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -TANK_HALF.y, 0]}>
         <planeGeometry args={[TANK_HALF.x * 2, TANK_HALF.z * 2]} />
-        <meshStandardMaterial color="#0a0a15" />
+        <meshStandardMaterial color={lightMode ? '#c8dbbe' : '#0a0a15'} />
       </mesh>
 
       {[
