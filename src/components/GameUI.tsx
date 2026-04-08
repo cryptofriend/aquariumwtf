@@ -7,6 +7,7 @@ import { Move, ArrowUpDown, Bug, Info, X, Smartphone } from 'lucide-react';
 import { useIsMobile } from '../hooks/use-mobile';
 import GameChat from './GameChat';
 import VirtualJoystick from './VirtualJoystick';
+import Leaderboard from './Leaderboard';
 import { GamePhase } from '../game/types';
 
 function Minimap() {
@@ -122,20 +123,23 @@ export default function GameUI({ phase }: { phase: GamePhase }) {
         {liveEntries.length === 0 && <div className="text-zinc-600 text-xs">No players yet</div>}
       </div>
 
-      {/* Kill counter + Weight */}
-      {!store.spectate && (
-        <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
-          <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg px-4 py-2">
-            <span className="text-red-400 text-2xl font-bold">{store.kills}</span>
-            <span className="text-zinc-500 text-xs ml-1">kills</span>
-          </div>
-          <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg px-4 py-2">
-            <span className="text-amber-400 text-xl font-bold">{store.weight.toFixed(1)}</span>
-            <span className="text-zinc-500 text-xs ml-1">kg</span>
-            <span className="text-zinc-600 text-[10px] ml-2">bite: {(store.weight * 0.1).toFixed(1)}kg</span>
-          </div>
-        </div>
-      )}
+      {/* Right side: stats + leaderboard */}
+      <div className="absolute top-4 right-4 flex flex-col items-end gap-2 pointer-events-auto">
+        {!store.spectate && (
+          <>
+            <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg px-4 py-2">
+              <span className="text-red-400 text-2xl font-bold">{store.kills}</span>
+              <span className="text-zinc-500 text-xs ml-1">kills</span>
+            </div>
+            <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg px-4 py-2">
+              <span className="text-amber-400 text-xl font-bold">{store.weight.toFixed(1)}</span>
+              <span className="text-zinc-500 text-xs ml-1">kg</span>
+              <span className="text-zinc-600 text-[10px] ml-2">bite: {(store.weight * 0.1).toFixed(1)}kg</span>
+            </div>
+          </>
+        )}
+        <Leaderboard />
+      </div>
 
       <Minimap />
 
