@@ -721,10 +721,10 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
   return (
     <>
       <ambientLight intensity={0.3} />
-      <directionalLight position={[10, 15, 10]} intensity={0.5} />
-      <pointLight position={[-TANK_HALF.x, 0, 0]} color="#ff4444" intensity={1.5} distance={50} />
-      <pointLight position={[TANK_HALF.x, 0, 0]} color="#4444ff" intensity={1.5} distance={50} />
-      <fog attach="fog" args={['#050510', 20, 80]} />
+      <directionalLight position={[100, 150, 100]} intensity={0.5} />
+      <pointLight position={[-TANK_HALF.x, 0, 0]} color="#ff4444" intensity={1.5} distance={500} />
+      <pointLight position={[TANK_HALF.x, 0, 0]} color="#4444ff" intensity={1.5} distance={500} />
+      <fog attach="fog" args={['#050510', 100, 500]} />
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -TANK_HALF.y, 0]}>
         <planeGeometry args={[TANK_HALF.x * 2, TANK_HALF.z * 2]} />

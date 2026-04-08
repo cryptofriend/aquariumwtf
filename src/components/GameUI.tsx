@@ -3,7 +3,7 @@ import { getStore } from '../game/useGameStore';
 import { TANK_HALF, BITE_COOLDOWN_MS } from '../game/constants';
 
 import { biteRequest } from './TankScene';
-import { Move, ArrowUpDown, Bug, Info, X, Smartphone } from 'lucide-react';
+import { Move, ArrowUpDown, Bug, Info, X, Smartphone, Sun, Moon } from 'lucide-react';
 import { useIsMobile } from '../hooks/use-mobile';
 import GameChat from './GameChat';
 import VirtualJoystick from './VirtualJoystick';
@@ -90,6 +90,7 @@ export default function GameUI({ phase }: { phase: GamePhase }) {
   const [, setTick] = useState(0);
   const [showRules, setShowRules] = useState(false);
   const [showMobileControls, setShowMobileControls] = useState(true);
+  const [lightMode, setLightMode] = useState(false);
   const isMobile = useIsMobile();
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 200);
