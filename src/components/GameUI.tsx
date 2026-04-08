@@ -3,7 +3,7 @@ import { getStore } from '../game/useGameStore';
 import { TANK_HALF, BITE_COOLDOWN_MS } from '../game/constants';
 
 import { biteRequest } from './TankScene';
-import { Move, ArrowUpDown, Bug, Info, X, Smartphone, Sun, Moon } from 'lucide-react';
+import { Move, ArrowUpDown, Bug, Info, X, Smartphone } from 'lucide-react';
 import { useIsMobile } from '../hooks/use-mobile';
 import GameChat from './GameChat';
 import VirtualJoystick from './VirtualJoystick';
@@ -90,7 +90,6 @@ export default function GameUI({ phase }: { phase: GamePhase }) {
   const [, setTick] = useState(0);
   const [showRules, setShowRules] = useState(false);
   const [showMobileControls, setShowMobileControls] = useState(true);
-  const [lightMode, setLightMode] = useState(false);
   const isMobile = useIsMobile();
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 200);
@@ -146,17 +145,6 @@ export default function GameUI({ phase }: { phase: GamePhase }) {
 
       {/* Info & Mobile toggle buttons near radar */}
       <div className="absolute bottom-20 right-[calc(1rem+180px)] pointer-events-auto flex flex-col gap-2">
-        <button
-          onClick={() => {
-            setLightMode(m => !m);
-            document.documentElement.classList.toggle('light-aquarium', !lightMode);
-            window.dispatchEvent(new CustomEvent('aquarium-light-mode', { detail: !lightMode }));
-          }}
-          className="bg-black/60 backdrop-blur-sm border border-zinc-700 rounded-lg p-2 hover:bg-black/80 transition-colors"
-          title="Toggle Light Mode"
-        >
-          {lightMode ? <Moon size={18} className="text-blue-300" /> : <Sun size={18} className="text-yellow-300" />}
-        </button>
         <button
           onClick={() => setShowRules(s => !s)}
           className="bg-black/60 backdrop-blur-sm border border-zinc-700 rounded-lg p-2 hover:bg-black/80 transition-colors"

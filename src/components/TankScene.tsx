@@ -16,7 +16,7 @@ import { joystickState } from './VirtualJoystick';
 import { toast } from 'sonner';
 
 const tmpVec = new THREE.Vector3();
-const PROXIMITY_RANGE = 50;
+const PROXIMITY_RANGE = 10;
 export const biteRequest = { pending: false };
 
 interface EatingOrb {
@@ -717,25 +717,18 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
   });
 
   const store = getStore();
-  const [lightMode, setLightMode] = useState(false);
-
-  useEffect(() => {
-    const handler = (e: Event) => setLightMode((e as CustomEvent).detail);
-    window.addEventListener('aquarium-light-mode', handler);
-    return () => window.removeEventListener('aquarium-light-mode', handler);
-  }, []);
 
   return (
     <>
-      <ambientLight intensity={lightMode ? 0.8 : 0.3} />
-      <directionalLight position={[100, 150, 100]} intensity={lightMode ? 1.2 : 0.5} />
-      <pointLight position={[-TANK_HALF.x, 0, 0]} color={lightMode ? '#66aaff' : '#ff4444'} intensity={1.5} distance={500} />
-      <pointLight position={[TANK_HALF.x, 0, 0]} color={lightMode ? '#88ccff' : '#4444ff'} intensity={1.5} distance={500} />
-      <fog attach="fog" args={[lightMode ? '#a8d8ea' : '#050510', 100, 500]} />
+      <ambientLight intensity={0.3} />
+      <directionalLight position={[10, 15, 10]} intensity={0.5} />
+      <pointLight position={[-TANK_HALF.x, 0, 0]} color="#ff4444" intensity={1.5} distance={50} />
+      <pointLight position={[TANK_HALF.x, 0, 0]} color="#4444ff" intensity={1.5} distance={50} />
+      <fog attach="fog" args={['#050510', 20, 80]} />
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -TANK_HALF.y, 0]}>
         <planeGeometry args={[TANK_HALF.x * 2, TANK_HALF.z * 2]} />
-        <meshStandardMaterial color={lightMode ? '#c8dbbe' : '#0a0a15'} />
+        <meshStandardMaterial color="#0a0a15" />
       </mesh>
 
       {[
@@ -746,7 +739,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       ].map((wall, i) => (
         <mesh key={i} position={wall.pos as any} rotation={wall.rot as any}>
           <planeGeometry args={wall.size as any} />
-          <meshStandardMaterial color={lightMode ? '#aaddee' : '#88aacc'} transparent opacity={lightMode ? 0.12 : 0.05} side={THREE.DoubleSide} />
+          <meshStandardMaterial color="#88aacc" transparent opacity={0.05} side={THREE.DoubleSide} />
         </mesh>
       ))}
 
