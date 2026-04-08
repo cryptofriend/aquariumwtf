@@ -746,7 +746,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       ].map((wall, i) => (
         <mesh key={i} position={wall.pos as any} rotation={wall.rot as any}>
           <planeGeometry args={wall.size as any} />
-          <meshStandardMaterial color="#88aacc" transparent opacity={0.05} side={THREE.DoubleSide} />
+          <meshStandardMaterial color={lightMode ? '#aaddee' : '#88aacc'} transparent opacity={lightMode ? 0.12 : 0.05} side={THREE.DoubleSide} />
         </mesh>
       ))}
 
