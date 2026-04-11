@@ -11,6 +11,7 @@ export default function EntryScreen({ onEnter }: Props) {
   const [takenNames, setTakenNames] = useState<Set<string>>(new Set());
   const [error, setError] = useState('');
   const [showAgentInfo, setShowAgentInfo] = useState(false);
+  const [copied, setCopied] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => {
