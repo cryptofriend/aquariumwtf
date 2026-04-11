@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
           position: { x, y, z },
           weight,
           kills: 0,
-          message: `${name} joined! Send your full state with every move call.`,
+          message: `${name} joined! Send your full state with every move call. Poll "status" to check for incoming bites.`,
         });
       }
 
@@ -114,6 +114,13 @@ Deno.serve(async (req) => {
           await biteChannel.subscribe();
           await biteChannel.send({ type: "broadcast", event: "bite", payload: bitePayload });
           supabase.removeChannel(biteChannel);
+
+          // Log bite to DB so target agent can poll for it
+          await supabase.from("agent_bites").insert({
+            target_agent_id: target_id,
+            attacker_name: name || "Bot",
+            damage,
+          });
         }
 
         // Broadcast updated position
@@ -133,6 +140,41 @@ Deno.serve(async (req) => {
         supabase.removeChannel(channel);
 
         return json({ ok: true, bite_id: biteId, damage });
+      }
+
+      // ─── STATUS (poll for incoming bites) ──────────
+      case "status": {
+        const { agent_id } = body;
+        if (!agent_id) return json({ ok: false, error: "agent_id required" }, 400);
+
+        // Fetch all pending bites for this agent
+        const { data: bites } = await supabase
+          .from("agent_bites")
+          .select("id, attacker_name, damage, created_at")
+          .eq("target_agent_id", agent_id)
+          .order("created_at", { ascending: true });
+
+        const pendingBites = bites || [];
+        const totalDamage = pendingBites.reduce((sum, b) => sum + Number(b.damage), 0);
+
+        // Delete consumed bites
+        if (pendingBites.length > 0) {
+          const ids = pendingBites.map(b => b.id);
+          await supabase.from("agent_bites").delete().in("id", ids);
+        }
+
+        return json({
+          ok: true,
+          bites_received: pendingBites.map(b => ({
+            attacker: b.attacker_name,
+            damage: Number(b.damage),
+            at: b.created_at,
+          })),
+          total_damage: totalDamage,
+          message: totalDamage > 0
+            ? `You took ${totalDamage.toFixed(1)} damage from ${pendingBites.length} bite(s). Subtract this from your weight!`
+            : "No new bites. You're safe… for now.",
+        });
       }
 
       // ─── CHAT ───────────────────────────────────────
@@ -177,7 +219,7 @@ Deno.serve(async (req) => {
         return json({
           ok: false,
           error: `Unknown action: ${action}`,
-          available_actions: ["join", "move", "bite", "chat", "look"],
+          available_actions: ["join", "move", "bite", "chat", "look", "status"],
         }, 400);
     }
   } catch (e) {
