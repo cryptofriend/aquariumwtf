@@ -15,27 +15,11 @@ function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
 }
 
-// In-memory agent sessions (per edge function instance)
-const agents = new Map<string, {
-  id: string;
-  name: string;
-  color: string;
-  x: number;
-  y: number;
-  z: number;
-  weight: number;
-  kills: number;
-  dead: boolean;
-  lastSeen: number;
-  spawnTime: number;
-}>();
-
-// Clean up agents not seen in 30s
-function cleanupAgents() {
-  const cutoff = Date.now() - 30000;
-  for (const [id, a] of agents) {
-    if (a.lastSeen < cutoff) agents.delete(id);
-  }
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
 Deno.serve(async (req) => {
@@ -46,12 +30,10 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const { action } = body;
-
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    cleanupAgents();
-
     switch (action) {
+      // ─── JOIN ───────────────────────────────────────
       case "join": {
         const name = (body.name || `Bot_${Math.floor(Math.random() * 9999)}`).slice(0, 16);
         const color = body.color || "#70a1ff";
@@ -61,10 +43,6 @@ Deno.serve(async (req) => {
         const z = (Math.random() - 0.5) * TANK_HALF.z;
         const weight = clamp(Number(body.hp) || 1, 1, 100);
 
-        const agent = { id, name, color, x, y, z, weight, kills: 0, dead: false, lastSeen: Date.now(), spawnTime: Date.now() };
-        agents.set(id, agent);
-
-        // Broadcast presence to all players
         const channel = supabase.channel("aquarium-live");
         await channel.subscribe();
         await channel.send({
@@ -74,103 +52,93 @@ Deno.serve(async (req) => {
         });
         supabase.removeChannel(channel);
 
-        return new Response(JSON.stringify({
+        return json({
           ok: true,
           agent_id: id,
           name,
           color,
           position: { x, y, z },
           weight,
-          message: `${name} joined the aquarium! Use agent_id in subsequent calls.`,
-        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          kills: 0,
+          message: `${name} joined! Send your full state with every move call.`,
+        });
       }
 
+      // ─── MOVE (stateless — agent sends its own state) ─────
       case "move": {
-        const { agent_id, x, y, z } = body;
-        const agent = agents.get(agent_id);
-        if (!agent) {
-          return new Response(JSON.stringify({ ok: false, error: "Unknown agent_id. Call join first." }), {
-            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        if (agent.dead) {
-          return new Response(JSON.stringify({ ok: false, error: "Agent is dead." }), {
-            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
+        const { agent_id, name, color, weight, kills } = body;
+        if (!agent_id) return json({ ok: false, error: "agent_id required" }, 400);
 
-        // Accept absolute position or relative delta
-        if (body.relative) {
-          agent.x = clamp(agent.x + (Number(x) || 0), -TANK_HALF.x, TANK_HALF.x);
-          agent.y = clamp(agent.y + (Number(y) || 0), -TANK_HALF.y, TANK_HALF.y);
-          agent.z = clamp(agent.z + (Number(z) || 0), -TANK_HALF.z, TANK_HALF.z);
-        } else {
-          agent.x = clamp(Number(x) ?? agent.x, -TANK_HALF.x, TANK_HALF.x);
-          agent.y = clamp(Number(y) ?? agent.y, -TANK_HALF.y, TANK_HALF.y);
-          agent.z = clamp(Number(z) ?? agent.z, -TANK_HALF.z, TANK_HALF.z);
-        }
-        agent.lastSeen = Date.now();
+        const x = clamp(Number(body.x) ?? 0, -TANK_HALF.x, TANK_HALF.x);
+        const y = clamp(Number(body.y) ?? 0, -TANK_HALF.y, TANK_HALF.y);
+        const z = clamp(Number(body.z) ?? 0, -TANK_HALF.z, TANK_HALF.z);
 
         const channel = supabase.channel("aquarium-live");
         await channel.subscribe();
         await channel.send({
           type: "broadcast",
           event: "player-state",
-          payload: { id: agent.id, name: agent.name, color: agent.color, x: agent.x, y: agent.y, z: agent.z, weight: agent.weight, kills: agent.kills, dead: agent.dead },
+          payload: {
+            id: agent_id,
+            name: name || "Bot",
+            color: color || "#70a1ff",
+            x, y, z,
+            weight: Number(weight) || 1,
+            kills: Number(kills) || 0,
+            dead: false,
+          },
         });
         supabase.removeChannel(channel);
 
-        return new Response(JSON.stringify({
-          ok: true,
-          position: { x: agent.x, y: agent.y, z: agent.z },
-          weight: agent.weight,
-        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return json({ ok: true, position: { x, y, z } });
       }
 
+      // ─── BITE ───────────────────────────────────────
       case "bite": {
-        const { agent_id } = body;
-        const agent = agents.get(agent_id);
-        if (!agent || agent.dead) {
-          return new Response(JSON.stringify({ ok: false, error: "Agent not found or dead." }), {
-            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        agent.lastSeen = Date.now();
+        const { agent_id, name, target_id, x, y, z, weight, color } = body;
+        if (!agent_id) return json({ ok: false, error: "agent_id required" }, 400);
 
-        // Broadcast bite as area-of-effect — game clients handle collision
         const biteId = crypto.randomUUID();
-        const damage = Math.max(0.1, agent.weight * 0.1);
+        const damage = Math.max(0.1, (Number(weight) || 1) * 0.1);
 
         const channel = supabase.channel("aquarium-live");
         await channel.subscribe();
 
-        // Also broadcast updated state
+        // If target_id specified, send targeted bite
+        if (target_id) {
+          const bitePayload = { biteId, targetId: target_id, attackerName: name || "Bot", damage };
+          await channel.send({ type: "broadcast", event: "bite", payload: bitePayload });
+
+          // Also send to personal bite channel
+          const biteChannel = supabase.channel(`bites-${target_id}`);
+          await biteChannel.subscribe();
+          await biteChannel.send({ type: "broadcast", event: "bite", payload: bitePayload });
+          supabase.removeChannel(biteChannel);
+        }
+
+        // Broadcast updated position
         await channel.send({
           type: "broadcast",
           event: "player-state",
-          payload: { id: agent.id, name: agent.name, color: agent.color, x: agent.x, y: agent.y, z: agent.z, weight: agent.weight, kills: agent.kills, dead: agent.dead },
+          payload: {
+            id: agent_id,
+            name: name || "Bot",
+            color: color || "#70a1ff",
+            x: Number(x) || 0, y: Number(y) || 0, z: Number(z) || 0,
+            weight: Number(weight) || 1,
+            kills: Number(body.kills) || 0,
+            dead: false,
+          },
         });
-
         supabase.removeChannel(channel);
 
-        return new Response(JSON.stringify({
-          ok: true,
-          bite_id: biteId,
-          damage_potential: damage,
-          position: { x: agent.x, y: agent.y, z: agent.z },
-          message: "Bite broadcast. Damage applied if enemies are in range (handled by game clients).",
-        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return json({ ok: true, bite_id: biteId, damage });
       }
 
+      // ─── CHAT ───────────────────────────────────────
       case "chat": {
-        const { agent_id, message } = body;
-        const agent = agents.get(agent_id);
-        if (!agent) {
-          return new Response(JSON.stringify({ ok: false, error: "Agent not found." }), {
-            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        agent.lastSeen = Date.now();
+        const { agent_id, name, color, message } = body;
+        if (!agent_id) return json({ ok: false, error: "agent_id required" }, 400);
 
         const chatChannel = supabase.channel("aquarium-chat");
         await chatChannel.subscribe();
@@ -178,67 +146,41 @@ Deno.serve(async (req) => {
           type: "broadcast",
           event: "chat",
           payload: {
-            id: `${agent.id}-${Date.now()}`,
-            sender: agent.name,
-            color: agent.color,
+            id: `${agent_id}-${Date.now()}`,
+            sender: name || "Bot",
+            color: color || "#70a1ff",
             text: (message || "").slice(0, 200),
             timestamp: Date.now(),
           },
         });
         supabase.removeChannel(chatChannel);
 
-        return new Response(JSON.stringify({ ok: true, message: "Message sent." }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return json({ ok: true });
       }
 
-      case "status": {
-        const { agent_id } = body;
-        const agent = agents.get(agent_id);
-        if (!agent) {
-          return new Response(JSON.stringify({ ok: false, error: "Agent not found." }), {
-            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        agent.lastSeen = Date.now();
-
-        return new Response(JSON.stringify({
-          ok: true,
-          name: agent.name,
-          position: { x: agent.x, y: agent.y, z: agent.z },
-          weight: agent.weight,
-          kills: agent.kills,
-          dead: agent.dead,
-          alive_seconds: Math.floor((Date.now() - agent.spawnTime) / 1000),
-        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-
+      // ─── LOOK (world info) ─────────────────────────
       case "look": {
-        // Return info about the game world (leaderboard)
         const { data } = await supabase
           .from("leaderboard")
           .select("player_name, weight, kills, survival_seconds")
           .order("weight", { ascending: false })
           .limit(10);
 
-        return new Response(JSON.stringify({
+        return json({
           ok: true,
           tank_bounds: { x: [-TANK_HALF.x, TANK_HALF.x], y: [-TANK_HALF.y, TANK_HALF.y], z: [-TANK_HALF.z, TANK_HALF.z] },
           leaderboard: data || [],
-          active_agents: agents.size,
-        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        });
       }
 
       default:
-        return new Response(JSON.stringify({
+        return json({
           ok: false,
           error: `Unknown action: ${action}`,
-          available_actions: ["join", "move", "bite", "chat", "status", "look"],
-        }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          available_actions: ["join", "move", "bite", "chat", "look"],
+        }, 400);
     }
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ ok: false, error: String(e) }, 500);
   }
 });
