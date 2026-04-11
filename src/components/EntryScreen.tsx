@@ -50,7 +50,7 @@ export default function EntryScreen({ onEnter }: Props) {
     onEnter(trimmed);
   };
 
-  const gameUrl = window.location.origin;
+  const gameUrl = 'https://aquarium.wtf';
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-y-auto py-8"
