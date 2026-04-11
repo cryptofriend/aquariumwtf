@@ -621,6 +621,13 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
             payload: bitePayload,
           });
 
+          // Log bite to DB so headless agents can poll for damage
+          void supabase.from('agent_bites').insert({
+            target_agent_id: n.key,
+            attacker_name: store.name,
+            damage: biteAmount,
+          });
+
           store.weight = roundWeight(store.weight + biteAmount);
           store.maxWeight = Math.max(store.maxWeight, store.weight);
           if (victim && !victim.dead && nextVictimWeight <= 0) store.kills++;
