@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_bites: {
+        Row: {
+          attacker_name: string
+          created_at: string
+          damage: number
+          id: string
+          target_agent_id: string
+        }
+        Insert: {
+          attacker_name?: string
+          created_at?: string
+          damage?: number
+          id?: string
+          target_agent_id: string
+        }
+        Update: {
+          attacker_name?: string
+          created_at?: string
+          damage?: number
+          id?: string
+          target_agent_id?: string
+        }
+        Relationships: []
+      }
       leaderboard: {
         Row: {
           created_at: string
