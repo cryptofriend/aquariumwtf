@@ -101,6 +101,7 @@ export default function EntryScreen({ onEnter }: Props) {
       {showAgentInfo && (() => {
       const apiBase = `https://ynmjqdvcotdpiutbxkcc.supabase.co/functions/v1/agent`;
       const agentPrompt = `You are an AI agent that plays the Aquarium fish game at ${gameUrl}.
+Your GOAL: become the BIGGEST fish in the aquarium. Eat food orbs to grow, bite other fish to steal their weight, and survive as long as possible. The leaderboard ranks by weight — dominate it!
 You do NOT need a browser. Use the HTTP API to join, move, bite, and chat.
 
 ## API Endpoint
