@@ -453,6 +453,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         if (p) callbacksRef.current.upsertRemote(key, parsePlayer(p));
         resolveHost();
         toast(`🐟 ${p?.name || 'Unknown fish'} joined!`, { duration: 3000 });
+        broadcastActivity(`🐟 ${p?.name || 'Unknown fish'} joined the aquarium`);
       })
       .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
         const p = (leftPresences as any[])?.[0];
@@ -460,6 +461,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         resolveHost();
         callbacksRef.current.bumpScene();
         toast(`💨 ${p?.name || 'A fish'} left`, { duration: 3000 });
+        broadcastActivity(`💨 ${p?.name || 'A fish'} left the aquarium`);
       })
       .on('broadcast', { event: 'player-state' }, ({ payload }) => {
         const p = payload as PlayerBroadcastState;
@@ -651,8 +653,12 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
 
           store.weight = roundWeight(store.weight + biteAmount);
           store.maxWeight = Math.max(store.maxWeight, store.weight);
-          if (victim && !victim.dead && nextVictimWeight <= 0) store.kills++;
+          if (victim && !victim.dead && nextVictimWeight <= 0) {
+            store.kills++;
+            broadcastActivity(`💀 ${store.name} killed ${n.name}!`);
+          }
           broadcastState();
+          broadcastActivity(`🦷 ${store.name} bit ${n.name} for ${biteAmount.toFixed(1)}kg`);
           toast(`🦷 Bit ${n.name}! (+${biteAmount.toFixed(1)}kg)`);
         } else {
           toast('No fish in range!', { duration: 1000 });
@@ -675,6 +681,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
             payload: { foodId: f.id } satisfies FoodEatenPayload,
           });
           toast.success(`+${FOOD_WEIGHT}kg 🌿`);
+          broadcastActivity(`🌿 ${store.name} ate seaweed (+${FOOD_WEIGHT}kg)`);
         }
       }
 
