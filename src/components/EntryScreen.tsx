@@ -99,33 +99,52 @@ export default function EntryScreen({ onEnter }: Props) {
       </button>
 
       {showAgentInfo && (() => {
-        const agentPrompt = `You are an AI agent that can join and play in the Aquarium fish game at ${gameUrl}.
+      const apiBase = `https://ynmjqdvcotdpiutbxkcc.supabase.co/functions/v1/agent`;
+      const agentPrompt = `You are an AI agent that plays the Aquarium fish game at ${gameUrl}.
+You do NOT need a browser. Use the HTTP API below to join, move, bite, and chat.
 
-To enter the game, navigate to this URL:
-${gameUrl}/?portal=true&username=YOUR_NAME&color=YOUR_COLOR&hp=YOUR_HP
+## API Endpoint
+POST ${apiBase}
+Content-Type: application/json
 
-Parameters:
-- portal=true (REQUIRED) — skips the entry screen and spawns you instantly
-- username — your agent name, max 16 characters (optional, random if omitted)
-- color — fish color as hex (%23ff0000) or name (red, cyan, etc.) (optional)
-- hp — starting health/weight 1-100 (optional, default 1)
-- speed — movement speed in m/s (optional)
-- ref — a return URL so a portal appears to go back (optional)
+## Step 1 — Join the game
+{"action":"join","name":"YOUR_NAME","color":"#00ff88","hp":1}
+→ Returns { agent_id, position, weight }. Save agent_id for all future calls.
 
-Example:
-${gameUrl}/?portal=true&username=AgentSmith&color=%2300ff88&hp=50
+## Step 2 — Move around (call repeatedly, e.g. every 500ms)
+{"action":"move","agent_id":"YOUR_ID","x":5,"y":0,"z":-3}
+Position bounds: x [-24,24], y [-10,10], z [-20,20]
+Use "relative":true to move by delta instead of absolute position:
+{"action":"move","agent_id":"YOUR_ID","x":2,"y":0,"z":-1,"relative":true}
 
-Game rules:
+## Step 3 — Bite nearby enemies
+{"action":"bite","agent_id":"YOUR_ID"}
+Deals 10% of your weight as damage to the nearest enemy in range.
+
+## Step 4 — Chat with other players
+{"action":"chat","agent_id":"YOUR_ID","message":"Hello fish!"}
+
+## Step 5 — Check your status
+{"action":"status","agent_id":"YOUR_ID"}
+→ Returns position, weight, kills, alive_seconds
+
+## Step 6 — View leaderboard & world info
+{"action":"look"}
+→ Returns tank bounds, top 10 leaderboard, active agent count
+
+## Game rules
 - You are a fish in a 3D aquarium with other players
-- Swim close to enemies to BITE them and steal 10% of your weight from them
-- Grow heavier to climb the leaderboard
+- Move close to enemies and BITE them to steal weight
+- Each bite deals 10% of your weight as damage
+- Eat golden food orbs (+1kg) by moving to their position
 - If your weight drops to 0, you die
-- There is a Vibe Jam Portal in the center — entering it takes you to the next game in the webring
+- Grow heavier to climb the leaderboard
 
-Controls (if you have browser control):
-- WASD to swim, Q/E to rise/dive
-- Mouse movement attracts your fish
-- Auto-bite when near enemies
+## Strategy tips
+- Keep moving to avoid being bitten
+- Move toward coordinates where other fish are (check leaderboard for active players)
+- Bite frequently when near enemies
+- Send heartbeat moves every 500ms to stay visible to other players
 
 Join now and become the biggest fish in the tank!`;
 
