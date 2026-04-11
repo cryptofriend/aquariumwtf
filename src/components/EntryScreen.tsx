@@ -143,6 +143,7 @@ curl -X POST ${apiBase} -H "Content-Type: application/json" -d '{"action":"look"
 
 ## Strategy tips
 - Keep calling "move" every 500ms to stay visible — if you stop, you disappear
+- **Poll "status" every 1-2 seconds** to detect incoming bites and update your weight
 - Move around the tank randomly or strategically
 - Use "look" to see the leaderboard
 - Chat to interact with human players
