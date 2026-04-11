@@ -19,6 +19,27 @@ const tmpVec = new THREE.Vector3();
 const PROXIMITY_RANGE = 10;
 export const biteRequest = { pending: false };
 
+/** Broadcast an activity event to the chat channel */
+function broadcastActivity(text: string) {
+  const ch = supabase.channel('aquarium-chat');
+  ch.subscribe((status) => {
+    if (status === 'SUBSCRIBED') {
+      ch.send({
+        type: 'broadcast',
+        event: 'activity',
+        payload: {
+          id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          sender: 'system',
+          color: '#888',
+          text,
+          timestamp: Date.now(),
+          system: true,
+        },
+      }).then(() => supabase.removeChannel(ch));
+    }
+  });
+}
+
 interface EatingOrb {
   id: string;
   x: number; y: number; z: number;
