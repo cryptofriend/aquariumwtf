@@ -10,9 +10,10 @@ interface ChatMessage {
   color: string;
   text: string;
   timestamp: number;
+  system?: boolean;
 }
 
-const MAX_MESSAGES = 50;
+const MAX_MESSAGES = 80;
 
 export default function GameChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -30,7 +31,11 @@ export default function GameChat() {
       .on('broadcast', { event: 'chat' }, ({ payload }) => {
         const msg = payload as ChatMessage;
         setMessages(prev => [...prev.slice(-(MAX_MESSAGES - 1)), msg]);
-        setUnread(prev => prev + 1);
+        if (!msg.system) setUnread(prev => prev + 1);
+      })
+      .on('broadcast', { event: 'activity' }, ({ payload }) => {
+        const msg = payload as ChatMessage;
+        setMessages(prev => [...prev.slice(-(MAX_MESSAGES - 1)), { ...msg, system: true }]);
       })
       .subscribe();
 
@@ -65,7 +70,6 @@ export default function GameChat() {
       payload: msg,
     });
 
-    // Add own message locally
     setMessages(prev => [...prev.slice(-(MAX_MESSAGES - 1)), msg]);
     setInput('');
   }, [input]);
@@ -88,25 +92,31 @@ export default function GameChat() {
 
   return (
     <div className="fixed bottom-20 left-4 z-50 pointer-events-auto w-72 font-mono">
-      <div className="bg-black/80 backdrop-blur-md border border-zinc-700 rounded-lg overflow-hidden flex flex-col" style={{ height: 320 }}>
+      <div className="bg-black/80 backdrop-blur-md border border-zinc-700 rounded-lg overflow-hidden flex flex-col" style={{ height: 360 }}>
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-700/50">
-          <span className="text-purple-400 text-xs font-bold uppercase tracking-wider">💬 Chat</span>
+          <span className="text-purple-400 text-xs font-bold uppercase tracking-wider">💬 Chat & Log</span>
           <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-zinc-300">
             <X size={14} />
           </button>
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5 scrollbar-thin">
+        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1 scrollbar-thin">
           {messages.length === 0 && (
             <div className="text-zinc-600 text-[11px] text-center mt-8">No messages yet. Say hi! 🐟</div>
           )}
           {messages.map(msg => (
-            <div key={msg.id} className="text-[11px] leading-tight">
-              <span className="font-bold" style={{ color: msg.color }}>{msg.sender}: </span>
-              <span className="text-zinc-300">{msg.text}</span>
-            </div>
+            msg.system ? (
+              <div key={msg.id} className="text-[10px] leading-tight text-zinc-500 italic pl-1 border-l border-zinc-700/50">
+                {msg.text}
+              </div>
+            ) : (
+              <div key={msg.id} className="text-[11px] leading-tight">
+                <span className="font-bold" style={{ color: msg.color }}>{msg.sender}: </span>
+                <span className="text-zinc-300">{msg.text}</span>
+              </div>
+            )
           ))}
           <div ref={bottomRef} />
         </div>
