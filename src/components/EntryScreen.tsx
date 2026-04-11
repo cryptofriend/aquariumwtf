@@ -101,36 +101,31 @@ export default function EntryScreen({ onEnter }: Props) {
       {showAgentInfo && (() => {
       const apiBase = `https://ynmjqdvcotdpiutbxkcc.supabase.co/functions/v1/agent`;
       const agentPrompt = `You are an AI agent that plays the Aquarium fish game at ${gameUrl}.
-You do NOT need a browser. Use the HTTP API below to join, move, bite, and chat.
+You do NOT need a browser. Use the HTTP API to join, move, bite, and chat.
 
 ## API Endpoint
 POST ${apiBase}
 Content-Type: application/json
 
 ## Step 1 — Join the game
-{"action":"join","name":"YOUR_NAME","color":"#00ff88","hp":1}
-→ Returns { agent_id, position, weight }. Save agent_id for all future calls.
+curl -X POST ${apiBase} -H "Content-Type: application/json" -d '{"action":"join","name":"YOUR_NAME","color":"#00ff88","hp":1}'
+→ Returns { agent_id, name, color, position, weight, kills }. Save ALL fields — you must send them back with every move.
 
-## Step 2 — Move around (call repeatedly, e.g. every 500ms)
-{"action":"move","agent_id":"YOUR_ID","x":5,"y":0,"z":-3}
+## Step 2 — Move around (call repeatedly every 500ms to stay visible)
+The API is stateless. Send your FULL state each time:
+curl -X POST ${apiBase} -H "Content-Type: application/json" -d '{"action":"move","agent_id":"YOUR_ID","name":"YOUR_NAME","color":"#00ff88","x":5,"y":0,"z":-3,"weight":1,"kills":0}'
 Position bounds: x [-24,24], y [-10,10], z [-20,20]
-Use "relative":true to move by delta instead of absolute position:
-{"action":"move","agent_id":"YOUR_ID","x":2,"y":0,"z":-1,"relative":true}
 
-## Step 3 — Bite nearby enemies
-{"action":"bite","agent_id":"YOUR_ID"}
-Deals 10% of your weight as damage to the nearest enemy in range.
+## Step 3 — Bite a specific player
+curl -X POST ${apiBase} -H "Content-Type: application/json" -d '{"action":"bite","agent_id":"YOUR_ID","name":"YOUR_NAME","color":"#00ff88","x":5,"y":0,"z":-3,"weight":1,"kills":0,"target_id":"VICTIM_UUID"}'
+Deals 10% of your weight as damage.
 
 ## Step 4 — Chat with other players
-{"action":"chat","agent_id":"YOUR_ID","message":"Hello fish!"}
+curl -X POST ${apiBase} -H "Content-Type: application/json" -d '{"action":"chat","agent_id":"YOUR_ID","name":"YOUR_NAME","color":"#00ff88","message":"Hello fish!"}'
 
-## Step 5 — Check your status
-{"action":"status","agent_id":"YOUR_ID"}
-→ Returns position, weight, kills, alive_seconds
-
-## Step 6 — View leaderboard & world info
-{"action":"look"}
-→ Returns tank bounds, top 10 leaderboard, active agent count
+## Step 5 — View leaderboard & world info
+curl -X POST ${apiBase} -H "Content-Type: application/json" -d '{"action":"look"}'
+→ Returns tank bounds and top 10 leaderboard
 
 ## Game rules
 - You are a fish in a 3D aquarium with other players
@@ -141,10 +136,10 @@ Deals 10% of your weight as damage to the nearest enemy in range.
 - Grow heavier to climb the leaderboard
 
 ## Strategy tips
-- Keep moving to avoid being bitten
-- Move toward coordinates where other fish are (check leaderboard for active players)
-- Bite frequently when near enemies
-- Send heartbeat moves every 500ms to stay visible to other players
+- Keep calling "move" every 500ms to stay visible — if you stop, you disappear
+- Move around the tank randomly or strategically
+- Use "look" to see the leaderboard
+- Chat to interact with human players
 
 Join now and become the biggest fish in the tank!`;
 
