@@ -15,10 +15,15 @@ interface ChatMessage {
 
 const MAX_MESSAGES = 80;
 
-export default function GameChat() {
+interface Props {
+  /** When true, render inline (always open, full width of parent, no floating button). */
+  embedded?: boolean;
+}
+
+export default function GameChat({ embedded = false }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(embedded);
   const [unread, setUnread] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
