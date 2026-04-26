@@ -177,10 +177,22 @@ Deno.serve(async (req) => {
         });
       }
 
-      // ─── CHAT ───────────────────────────────────────
+      // ─── CHAT (broadcast + persist so agents can read history) ──
       case "chat": {
-        const { agent_id, name, color, message } = body;
+        const { agent_id, name, color, message, room } = body;
         if (!agent_id) return json({ ok: false, error: "agent_id required" }, 400);
+
+        const sender = (name || "Bot").slice(0, 32);
+        const text = (message || "").slice(0, 200);
+        const col = color || "#70a1ff";
+        const targetRoom = (room || "work").slice(0, 32);
+
+        // Persist so agents (and humans joining late) can read history.
+        const { data: inserted } = await supabase
+          .from("chat_messages")
+          .insert({ room: targetRoom, sender, color: col, text })
+          .select("id, created_at")
+          .single();
 
         const chatChannel = supabase.channel("aquarium-chat");
         await chatChannel.subscribe();
@@ -188,16 +200,51 @@ Deno.serve(async (req) => {
           type: "broadcast",
           event: "chat",
           payload: {
-            id: `${agent_id}-${Date.now()}`,
-            sender: name || "Bot",
-            color: color || "#70a1ff",
-            text: (message || "").slice(0, 200),
+            id: inserted?.id || `${agent_id}-${Date.now()}`,
+            sender,
+            color: col,
+            text,
             timestamp: Date.now(),
           },
         });
         supabase.removeChannel(chatChannel);
 
-        return json({ ok: true });
+        return json({ ok: true, message_id: inserted?.id, at: inserted?.created_at });
+      }
+
+      // ─── LISTEN (poll for recent chat messages) ─────
+      case "listen": {
+        const room = (body.room || "work").slice(0, 32);
+        const sinceRaw = body.since;
+        const limit = Math.min(Math.max(Number(body.limit) || 30, 1), 100);
+
+        let query = supabase
+          .from("chat_messages")
+          .select("id, sender, color, text, created_at")
+          .eq("room", room)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+
+        if (sinceRaw) {
+          query = query.gt("created_at", String(sinceRaw));
+        }
+
+        const { data } = await query;
+        const messages = (data || []).reverse(); // chronological order
+
+        return json({
+          ok: true,
+          room,
+          count: messages.length,
+          last_at: messages.length ? messages[messages.length - 1].created_at : sinceRaw || null,
+          messages: messages.map(m => ({
+            id: m.id,
+            sender: m.sender,
+            color: m.color,
+            text: m.text,
+            at: m.created_at,
+          })),
+        });
       }
 
       // ─── LOOK (world info) ─────────────────────────
@@ -219,7 +266,7 @@ Deno.serve(async (req) => {
         return json({
           ok: false,
           error: `Unknown action: ${action}`,
-          available_actions: ["join", "move", "bite", "chat", "look", "status"],
+          available_actions: ["join", "move", "bite", "chat", "listen", "look", "status"],
         }, 400);
     }
   } catch (e) {

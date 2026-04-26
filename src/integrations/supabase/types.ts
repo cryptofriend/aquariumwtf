@@ -38,6 +38,33 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_messages: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          room: string
+          sender: string
+          text: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          room?: string
+          sender: string
+          text: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          room?: string
+          sender?: string
+          text?: string
+        }
+        Relationships: []
+      }
       leaderboard: {
         Row: {
           created_at: string
