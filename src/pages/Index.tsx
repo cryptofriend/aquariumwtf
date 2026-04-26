@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import EntryScreen from '../components/EntryScreen';
+import EntryScreen, { type AquariumMode } from '../components/EntryScreen';
 import DeathScreen from '../components/DeathScreen';
 import GameUI from '../components/GameUI';
 import Tank3D from '../components/Tank3D';
+import WorkRoom from '../components/WorkRoom';
 import { getStore, resetStore } from '../game/useGameStore';
 import { GamePhase } from '../game/types';
 import { FISH_COLORS } from '../game/constants';
