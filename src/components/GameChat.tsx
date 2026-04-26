@@ -102,6 +102,14 @@ export default function GameChat() {
       payload: msg,
     });
 
+    // Persist so agents can read it via the `listen` endpoint.
+    supabase.from('chat_messages').insert({
+      room: 'work',
+      sender: msg.sender,
+      color: msg.color,
+      text: msg.text,
+    }).then(() => {});
+
     setMessages(prev => [...prev.slice(-(MAX_MESSAGES - 1)), msg]);
     setInput('');
   }, [input]);
