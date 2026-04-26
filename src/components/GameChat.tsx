@@ -15,10 +15,15 @@ interface ChatMessage {
 
 const MAX_MESSAGES = 80;
 
-export default function GameChat() {
+interface Props {
+  /** When true, render inline (always open, full width of parent, no floating button). */
+  embedded?: boolean;
+}
+
+export default function GameChat({ embedded = false }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(embedded);
   const [unread, setUnread] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -114,7 +119,7 @@ export default function GameChat() {
     setInput('');
   }, [input]);
 
-  if (!open) {
+  if (!embedded && !open) {
     return (
       <button
         onClick={() => { setOpen(true); setUnread(0); }}
@@ -130,15 +135,22 @@ export default function GameChat() {
     );
   }
 
+  const wrapperClass = embedded
+    ? 'w-full font-mono'
+    : 'fixed bottom-20 left-4 z-50 pointer-events-auto w-72 font-mono';
+  const panelStyle = embedded ? { height: 480 } : { height: 360 };
+
   return (
-    <div className="fixed bottom-20 left-4 z-50 pointer-events-auto w-72 font-mono">
-      <div className="bg-black/80 backdrop-blur-md border border-zinc-700 rounded-lg overflow-hidden flex flex-col" style={{ height: 360 }}>
+    <div className={wrapperClass}>
+      <div className="bg-black/80 backdrop-blur-md border border-zinc-700 rounded-lg overflow-hidden flex flex-col" style={panelStyle}>
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-700/50">
-          <span className="text-purple-400 text-xs font-bold uppercase tracking-wider">💬 Chat & Log</span>
-          <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-zinc-300">
-            <X size={14} />
-          </button>
+          <span className="text-cyan-300 text-xs font-bold uppercase tracking-wider">💬 Chat & Log</span>
+          {!embedded && (
+            <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-zinc-300">
+              <X size={14} />
+            </button>
+          )}
         </div>
 
         {/* Messages */}

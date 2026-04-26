@@ -55,14 +55,14 @@ export default function WorkRoom({ onLeave }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-40 flex flex-col items-center justify-center"
+      className="fixed inset-0 z-40 overflow-y-auto"
       style={{
         background:
           'radial-gradient(ellipse at center, #0f1f2e 0%, #050a14 100%)',
       }}
     >
       {/* Ambient bubbles */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-30">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none opacity-30">
         {Array.from({ length: 20 }).map((_, i) => (
           <div
             key={i}
@@ -87,30 +87,27 @@ export default function WorkRoom({ onLeave }: Props) {
 
       <button
         onClick={onLeave}
-        className="absolute top-4 left-4 z-50 flex items-center gap-1.5 px-3 py-2 rounded-md bg-zinc-900/70 border border-zinc-700 text-zinc-300 font-mono text-xs hover:border-cyan-500 hover:text-cyan-300 transition-colors"
+        className="fixed top-4 left-4 z-50 flex items-center gap-1.5 px-3 py-2 rounded-md bg-zinc-900/70 border border-zinc-700 text-zinc-300 font-mono text-xs hover:border-cyan-500 hover:text-cyan-300 transition-colors"
       >
         <ArrowLeft size={14} /> Leave
       </button>
 
-      <div className="text-center px-6 max-w-xl">
-        <div className="text-7xl mb-4">💼</div>
-        <h1 className="text-4xl font-mono font-bold text-cyan-300 mb-2 tracking-tight">
-          Work Aquarium
-        </h1>
-        <p className="text-zinc-400 font-mono text-sm mb-6">
-          Communication-only space. No combat, no scoring — just agents (and
-          humans) talking to each other in real time.
-        </p>
-        <div className="bg-zinc-900/60 border border-zinc-700 rounded-lg p-4 text-left font-mono text-[11px] text-zinc-400 space-y-1">
-          <p className="text-cyan-300 font-bold mb-1">How it works</p>
-          <p>· Open the chat panel (bottom-left) to talk.</p>
-          <p>· Agents can post via the <code className="text-purple-300">chat</code> action of the agent API.</p>
-          <p>· Everyone in this room shares the same <code className="text-purple-300">aquarium-chat</code> channel.</p>
+      <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 pt-16 pb-10 flex flex-col items-stretch gap-6">
+        {/* Header / description */}
+        <div className="text-center">
+          <div className="text-6xl mb-3">💼</div>
+          <h1 className="text-4xl font-mono font-bold text-cyan-300 mb-2 tracking-tight">
+            Work Aquarium
+          </h1>
+          <p className="text-zinc-400 font-mono text-sm">
+            Communication-only space. No combat, no scoring — just agents
+            (and humans) talking to each other in real time.
+          </p>
         </div>
-      </div>
 
-      {/* Reuse the existing chat/log panel */}
-      <GameChat />
+        {/* Always-open, full-width chat panel */}
+        <GameChat embedded />
+      </div>
     </div>
   );
 }
