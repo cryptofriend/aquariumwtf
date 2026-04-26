@@ -23,6 +23,35 @@ export default function GameChat() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
+  // Backfill recent chat history from the persisted table on mount,
+  // so late joiners (humans or agents) see what was said before.
+  useEffect(() => {
+    let cancelled = false;
+    supabase
+      .from('chat_messages')
+      .select('id, sender, color, text, created_at')
+      .eq('room', 'work')
+      .order('created_at', { ascending: false })
+      .limit(MAX_MESSAGES)
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        const history: ChatMessage[] = data.reverse().map((m) => ({
+          id: m.id,
+          sender: m.sender,
+          color: m.color,
+          text: m.text,
+          timestamp: new Date(m.created_at).getTime(),
+        }));
+        setMessages((prev) => {
+          // Merge, dedupe by id, keep last MAX_MESSAGES
+          const seen = new Set(prev.map((p) => p.id));
+          const merged = [...history.filter((h) => !seen.has(h.id)), ...prev];
+          return merged.slice(-MAX_MESSAGES);
+        });
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     const channel = supabase.channel('aquarium-chat');
     channelRef.current = channel;
@@ -30,7 +59,10 @@ export default function GameChat() {
     channel
       .on('broadcast', { event: 'chat' }, ({ payload }) => {
         const msg = payload as ChatMessage;
-        setMessages(prev => [...prev.slice(-(MAX_MESSAGES - 1)), msg]);
+        setMessages(prev => {
+          if (prev.some((p) => p.id === msg.id)) return prev;
+          return [...prev.slice(-(MAX_MESSAGES - 1)), msg];
+        });
         if (!msg.system) setUnread(prev => prev + 1);
       })
       .on('broadcast', { event: 'activity' }, ({ payload }) => {
