@@ -8,6 +8,7 @@ import { getStore, resetStore } from '../game/useGameStore';
 import { registerOnLeaderboard, resetLeaderboardTracker } from '../game/leaderboardTracker';
 import { GamePhase } from '../game/types';
 import { FISH_COLORS } from '../game/constants';
+import { acquireSessionLock, releaseSessionLock } from '../game/sessionLock';
 
 function getPortalParams() {
   const params = new URLSearchParams(window.location.search);
