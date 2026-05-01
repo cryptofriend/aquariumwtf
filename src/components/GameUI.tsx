@@ -110,7 +110,7 @@ export default function GameUI({ phase }: { phase: GamePhase }) {
     <div className="fixed inset-0 z-40 pointer-events-none font-mono">
       {/* Live Players */}
       <div className="absolute top-4 left-4 pointer-events-auto bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg p-3 min-w-[200px]">
-        <div className="text-purple-400 text-xs font-bold mb-2 uppercase tracking-wider">🔴 Live Players</div>
+        <div className="text-purple-400 text-xs font-bold mb-2 uppercase tracking-wider">🔴 Eat or Get Eaten</div>
         {liveEntries.slice(0, 8).map((e, i) => (
           <div key={i} className={`flex items-center gap-2 text-xs py-0.5 ${e.dead ? 'opacity-40 line-through' : ''} ${e.isMe ? 'bg-white/10 rounded px-1 -mx-1' : ''}`}>
             <span className="text-zinc-400 w-4">{i + 1}</span>
