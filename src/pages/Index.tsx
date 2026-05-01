@@ -82,6 +82,7 @@ export default function Index() {
   }, []);
 
   const handlePlayAgain = useCallback(() => {
+    releaseSessionLock();
     resetStore();
     resetLeaderboardTracker();
     setPhase('entry');
