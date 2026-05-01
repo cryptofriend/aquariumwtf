@@ -22,13 +22,9 @@ interface Props {
   embedded?: boolean;
   /** When true, fill 100% of the parent's height instead of a fixed height. */
   fillParent?: boolean;
-  /** Logical chat room. 'game' = aquarium combat chat, 'work' = work room chat. */
-  room?: 'game' | 'work';
-  /** Optional element rendered in the header (e.g. Invite Agent button). */
-  headerSlot?: React.ReactNode;
 }
 
-export default function GameChat({ embedded = false, fillParent = false, room = 'game', headerSlot }: Props) {
+export default function GameChat({ embedded = false, fillParent = false }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [open, setOpen] = useState(embedded);
@@ -43,7 +39,7 @@ export default function GameChat({ embedded = false, fillParent = false, room = 
     supabase
       .from('chat_messages')
       .select('id, sender, color, text, created_at, system')
-      .eq('room', room)
+      .eq('room', 'work')
       .order('created_at', { ascending: false })
       .limit(HISTORY_LIMIT)
       .then(({ data }) => {
@@ -62,11 +58,10 @@ export default function GameChat({ embedded = false, fillParent = false, room = 
         });
       });
     return () => { cancelled = true; };
-  }, [room]);
+  }, []);
 
   useEffect(() => {
-    setMessages([]);
-    const channel = supabase.channel(`aquarium-chat-${room}`);
+    const channel = supabase.channel('aquarium-chat');
     channelRef.current = channel;
 
     channel
@@ -90,7 +85,7 @@ export default function GameChat({ embedded = false, fillParent = false, room = 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [room]);
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -122,7 +117,7 @@ export default function GameChat({ embedded = false, fillParent = false, room = 
     // history survives reloads. Use the same id we broadcast for dedupe.
     supabase.from('chat_messages').insert({
       id: msg.id,
-      room,
+      room: 'work',
       sender: msg.sender,
       color: msg.color,
       text: msg.text,
@@ -130,7 +125,7 @@ export default function GameChat({ embedded = false, fillParent = false, room = 
 
     setMessages(prev => [...prev, msg]);
     setInput('');
-  }, [input, room]);
+  }, [input]);
 
   if (!embedded && !open) {
     return (
@@ -167,16 +162,13 @@ export default function GameChat({ embedded = false, fillParent = false, room = 
       >
         {/* Header (hidden in fillParent mode — parent provides its own tab header) */}
         {!fillParent && (
-          <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-700/50 gap-2">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-700/50">
             <span className="text-cyan-300 text-xs font-bold uppercase tracking-wider">💬 Chat & Log</span>
-            <div className="flex items-center gap-2">
-              {headerSlot}
-              {!embedded && (
-                <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-zinc-300">
-                  <X size={14} />
-                </button>
-              )}
-            </div>
+            {!embedded && (
+              <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-zinc-300">
+                <X size={14} />
+              </button>
+            )}
           </div>
         )}
 

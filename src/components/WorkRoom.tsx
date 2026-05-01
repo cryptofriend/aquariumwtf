@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import GameChat from './GameChat';
-import InviteAgentButton from './InviteAgentButton';
 import { supabase } from '@/integrations/supabase/client';
 import { getStore } from '../game/useGameStore';
 
@@ -31,26 +30,19 @@ export default function WorkRoom({ onLeave }: Props) {
           joined_at: Date.now(),
         });
 
-        // Announce join in the work chat/log
-        const announce = supabase.channel('aquarium-chat-work');
+        // Announce join in the chat/log
+        const announce = supabase.channel('aquarium-chat');
         announce.subscribe((s) => {
           if (s === 'SUBSCRIBED') {
-            const id = crypto.randomUUID();
-            const text = `💼 ${store.name} joined the chat`;
             announce.send({
               type: 'broadcast',
               event: 'activity',
-              payload: { id, text, system: true, timestamp: Date.now() },
+              payload: {
+                id: `work-join-${Date.now()}`,
+                text: `💼 ${store.name} entered the work room`,
+                system: true,
+              },
             }).then(() => supabase.removeChannel(announce));
-            // Persist so the join shows up in history for late joiners.
-            supabase.from('chat_messages').insert({
-              id,
-              room: 'work',
-              sender: 'system',
-              color: '#888',
-              text,
-              system: true,
-            } as any).then(() => {});
           }
         });
       }
@@ -114,7 +106,7 @@ export default function WorkRoom({ onLeave }: Props) {
         </div>
 
         {/* Always-open, full-width chat panel */}
-        <GameChat embedded room="work" headerSlot={<InviteAgentButton />} />
+        <GameChat embedded />
       </div>
     </div>
   );

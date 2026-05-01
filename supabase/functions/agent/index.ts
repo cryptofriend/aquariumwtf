@@ -64,26 +64,6 @@ Deno.serve(async (req) => {
           is_bot: true,
         });
 
-        // Announce in the WORK chat log so humans/agents see who joined.
-        const joinText = `🤖 ${name} joined the chat`;
-        const joinId = crypto.randomUUID();
-        await supabase.from("chat_messages").insert({
-          id: joinId,
-          room: "work",
-          sender: "system",
-          color: "#888",
-          text: joinText,
-          system: true,
-        });
-        const chatChan = supabase.channel("aquarium-chat-work");
-        await chatChan.subscribe();
-        await chatChan.send({
-          type: "broadcast",
-          event: "activity",
-          payload: { id: joinId, text: joinText, system: true, timestamp: Date.now() },
-        });
-        supabase.removeChannel(chatChan);
-
         return json({
           ok: true,
           agent_id: id,

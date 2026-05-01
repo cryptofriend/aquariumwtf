@@ -1,1 +1,0 @@
-DELETE FROM public.chat_messages WHERE room = 'work';

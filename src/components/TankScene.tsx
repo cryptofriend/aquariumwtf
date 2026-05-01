@@ -47,7 +47,7 @@ function broadcastActivity(text: string) {
   // Persist to chat_messages so the activity log survives reloads.
   supabase.from('chat_messages').insert({
     id,
-    room: 'game',
+    room: 'work',
     sender: 'system',
     color: '#888',
     text,
