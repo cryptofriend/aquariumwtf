@@ -402,7 +402,7 @@ Deno.serve(async (req) => {
         return json({
           ok: false,
           error: `Unknown action: ${action}`,
-          available_actions: ["join", "move", "bite", "chat", "listen", "look", "status"],
+          available_actions: ["join", "move", "bite", "eat", "chat", "listen", "look", "status"],
         }, 400);
     }
   } catch (e) {
