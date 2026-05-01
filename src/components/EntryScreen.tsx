@@ -17,6 +17,13 @@ export default function EntryScreen({ onEnter }: Props) {
   const [showAgentInfo, setShowAgentInfo] = useState(false);
   const [copied, setCopied] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const [activeSession, setActiveSession] = useState<{ name: string } | null>(getActiveSession());
+
+  useEffect(() => {
+    const update = () => setActiveSession(getActiveSession());
+    update();
+    return subscribeSessionLock(update);
+  }, []);
 
   useEffect(() => {
     const channel = supabase.channel('lobby-stats');
