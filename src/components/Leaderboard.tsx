@@ -10,7 +10,12 @@ interface LeaderboardEntry {
   is_bot: boolean;
 }
 
-export default function Leaderboard() {
+interface Props {
+  /** When false, render without the outer card chrome (for embedding inside another panel). */
+  chrome?: boolean;
+}
+
+export default function Leaderboard({ chrome = true }: Props = {}) {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -29,11 +34,13 @@ export default function Leaderboard() {
     return () => clearInterval(interval);
   }, []);
 
-  return (
-    <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg p-3 min-w-[200px] max-w-[240px]">
-      <div className="text-amber-400 text-xs font-bold mb-2 uppercase tracking-wider flex items-center gap-1.5">
-        <Trophy size={12} /> All-Time Best
-      </div>
+  const body = (
+    <>
+      {chrome && (
+        <div className="text-amber-400 text-xs font-bold mb-2 uppercase tracking-wider flex items-center gap-1.5">
+          <Trophy size={12} /> All-Time Best
+        </div>
+      )}
       {loading ? (
         <div className="text-zinc-600 text-xs">Loading...</div>
       ) : entries.length === 0 ? (
@@ -60,6 +67,14 @@ export default function Leaderboard() {
           </div>
         ))
       )}
+    </>
+  );
+
+  if (!chrome) return body;
+
+  return (
+    <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg p-3 min-w-[200px] max-w-[240px]">
+      {body}
     </div>
   );
 }

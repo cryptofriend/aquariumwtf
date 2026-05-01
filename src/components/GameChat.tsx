@@ -20,9 +20,11 @@ const HISTORY_LIMIT = 1000;
 interface Props {
   /** When true, render inline (always open, full width of parent, no floating button). */
   embedded?: boolean;
+  /** When true, fill 100% of the parent's height instead of a fixed height. */
+  fillParent?: boolean;
 }
 
-export default function GameChat({ embedded = false }: Props) {
+export default function GameChat({ embedded = false, fillParent = false }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [open, setOpen] = useState(embedded);
@@ -141,23 +143,34 @@ export default function GameChat({ embedded = false }: Props) {
     );
   }
 
-  const wrapperClass = embedded
-    ? 'w-full font-mono'
-    : 'fixed bottom-20 left-4 z-50 pointer-events-auto w-72 font-mono';
-  const panelStyle = embedded ? { height: 480 } : { height: 360 };
+  const wrapperClass = fillParent
+    ? 'h-full w-full font-mono'
+    : embedded
+      ? 'w-full font-mono'
+      : 'fixed bottom-20 left-4 z-50 pointer-events-auto w-72 font-mono';
+  const panelStyle: React.CSSProperties = fillParent
+    ? { height: '100%' }
+    : embedded
+      ? { height: 480 }
+      : { height: 360 };
 
   return (
     <div className={wrapperClass}>
-      <div className="bg-black/80 backdrop-blur-md border border-zinc-700 rounded-lg overflow-hidden flex flex-col" style={panelStyle}>
-        {/* Header */}
-        <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-700/50">
-          <span className="text-cyan-300 text-xs font-bold uppercase tracking-wider">💬 Chat & Log</span>
-          {!embedded && (
-            <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-zinc-300">
-              <X size={14} />
-            </button>
-          )}
-        </div>
+      <div
+        className={`bg-black/80 backdrop-blur-md ${fillParent ? '' : 'border border-zinc-700 rounded-lg'} overflow-hidden flex flex-col`}
+        style={panelStyle}
+      >
+        {/* Header (hidden in fillParent mode — parent provides its own tab header) */}
+        {!fillParent && (
+          <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-700/50">
+            <span className="text-cyan-300 text-xs font-bold uppercase tracking-wider">💬 Chat & Log</span>
+            {!embedded && (
+              <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-zinc-300">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1 scrollbar-thin">

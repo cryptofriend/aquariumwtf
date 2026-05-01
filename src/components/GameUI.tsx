@@ -5,9 +5,8 @@ import { TANK_HALF, BITE_COOLDOWN_MS } from '../game/constants';
 import { biteRequest } from './TankScene';
 import { Move, ArrowUpDown, Bug, Info, X, Smartphone } from 'lucide-react';
 import { useIsMobile } from '../hooks/use-mobile';
-import GameChat from './GameChat';
 import VirtualJoystick from './VirtualJoystick';
-import Leaderboard from './Leaderboard';
+import ChatLeaderboardPanel from './ChatLeaderboardPanel';
 import { GamePhase } from '../game/types';
 
 function Minimap() {
@@ -123,7 +122,7 @@ export default function GameUI({ phase }: { phase: GamePhase }) {
         {liveEntries.length === 0 && <div className="text-zinc-600 text-xs">No players yet</div>}
       </div>
 
-      {/* Right side: stats + leaderboard */}
+      {/* Right side: stats only — leaderboard moved into the unified bottom-left panel */}
       <div className="absolute top-4 right-4 flex flex-col items-end gap-2 pointer-events-auto">
         {!store.spectate && (
           <>
@@ -138,7 +137,6 @@ export default function GameUI({ phase }: { phase: GamePhase }) {
             </div>
           </>
         )}
-        <Leaderboard />
       </div>
 
       <Minimap />
@@ -244,8 +242,8 @@ export default function GameUI({ phase }: { phase: GamePhase }) {
       {/* Mobile joystick */}
       {isMobile && phase === 'playing' && showMobileControls && <VirtualJoystick />}
 
-      {/* Chat */}
-      {phase === 'playing' && <GameChat />}
+      {/* Unified Chat + Leaderboard panel */}
+      {phase === 'playing' && <ChatLeaderboardPanel />}
     </div>
   );
 }
