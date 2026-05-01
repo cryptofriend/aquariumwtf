@@ -61,7 +61,7 @@ export default function Index() {
     const store = getStore();
     store.name = name;
     if (selectedMode === 'work') {
-      navigate('/work');
+      navigate('/chat');
       return;
     }
     store.phase = 'playing';
