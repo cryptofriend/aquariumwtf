@@ -119,7 +119,7 @@ export default function GameChat({ embedded = false }: Props) {
       text: msg.text,
     }).then(() => {});
 
-    setMessages(prev => [...prev.slice(-(MAX_MESSAGES - 1)), msg]);
+    setMessages(prev => [...prev, msg]);
     setInput('');
   }, [input]);
 
