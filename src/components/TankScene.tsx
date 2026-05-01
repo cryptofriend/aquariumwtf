@@ -20,22 +20,26 @@ const tmpVec = new THREE.Vector3();
 const PROXIMITY_RANGE = 10;
 export const biteRequest = { pending: false };
 
-/** Broadcast an activity event to the chat channel */
+/** Broadcast an activity event to the chat channel AND persist it
+ *  so it survives page reloads — the aquarium log is permanent. */
 function broadcastActivity(text: string) {
+  const id = `act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const payload = {
+    id,
+    sender: 'system',
+    color: '#888',
+    text,
+    timestamp: Date.now(),
+    system: true,
+  };
+  // Live broadcast for current viewers
   const ch = supabase.channel('aquarium-chat');
   ch.subscribe((status) => {
     if (status === 'SUBSCRIBED') {
       ch.send({
         type: 'broadcast',
         event: 'activity',
-        payload: {
-          id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          sender: 'system',
-          color: '#888',
-          text,
-          timestamp: Date.now(),
-          system: true,
-        },
+        payload,
       }).then(() => supabase.removeChannel(ch));
     }
   });
