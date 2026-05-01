@@ -102,8 +102,15 @@ export default function EntryScreen({ onEnter }: Props) {
       {error && !isTaken && <p className="text-red-400 text-xs font-mono mb-2">{error}</p>}
       {!isTaken && !error && <div className="mb-3" />}
 
+      {blockedByOtherTab && (
+        <div className="w-72 mb-3 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/40 text-red-300 font-mono text-[11px] text-center">
+          ⚠ Already playing as <span className="font-bold">{activeSession?.name}</span> in another tab.
+          <br />Close that tab to play here.
+        </div>
+      )}
+
       <button
-        disabled={!trimmed || isTaken}
+        disabled={!trimmed || isTaken || blockedByOtherTab}
         onClick={handleEnter}
         className={`px-8 py-3 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed text-white font-mono font-bold text-lg transition-colors ${
           isWork ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-red-600 hover:bg-red-500'
