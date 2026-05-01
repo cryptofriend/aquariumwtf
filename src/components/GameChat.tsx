@@ -20,6 +20,8 @@ const HISTORY_LIMIT = 1000;
 interface Props {
   /** When true, render inline (always open, full width of parent, no floating button). */
   embedded?: boolean;
+  /** When true, fill 100% of the parent's height instead of a fixed height. */
+  fillParent?: boolean;
 }
 
 export default function GameChat({ embedded = false }: Props) {
