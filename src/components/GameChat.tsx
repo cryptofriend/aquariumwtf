@@ -22,9 +22,11 @@ interface Props {
   embedded?: boolean;
   /** When true, fill 100% of the parent's height instead of a fixed height. */
   fillParent?: boolean;
+  /** Logical chat room. 'game' = aquarium combat chat, 'work' = work room chat. */
+  room?: 'game' | 'work';
 }
 
-export default function GameChat({ embedded = false, fillParent = false }: Props) {
+export default function GameChat({ embedded = false, fillParent = false, room = 'game' }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [open, setOpen] = useState(embedded);
@@ -39,7 +41,7 @@ export default function GameChat({ embedded = false, fillParent = false }: Props
     supabase
       .from('chat_messages')
       .select('id, sender, color, text, created_at, system')
-      .eq('room', 'work')
+      .eq('room', room)
       .order('created_at', { ascending: false })
       .limit(HISTORY_LIMIT)
       .then(({ data }) => {
@@ -58,10 +60,11 @@ export default function GameChat({ embedded = false, fillParent = false }: Props
         });
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [room]);
 
   useEffect(() => {
-    const channel = supabase.channel('aquarium-chat');
+    setMessages([]);
+    const channel = supabase.channel(`aquarium-chat-${room}`);
     channelRef.current = channel;
 
     channel
@@ -85,7 +88,7 @@ export default function GameChat({ embedded = false, fillParent = false }: Props
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [room]);
 
   useEffect(() => {
     if (open) {
@@ -117,7 +120,7 @@ export default function GameChat({ embedded = false, fillParent = false }: Props
     // history survives reloads. Use the same id we broadcast for dedupe.
     supabase.from('chat_messages').insert({
       id: msg.id,
-      room: 'work',
+      room,
       sender: msg.sender,
       color: msg.color,
       text: msg.text,
@@ -125,7 +128,7 @@ export default function GameChat({ embedded = false, fillParent = false }: Props
 
     setMessages(prev => [...prev, msg]);
     setInput('');
-  }, [input]);
+  }, [input, room]);
 
   if (!embedded && !open) {
     return (
