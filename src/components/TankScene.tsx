@@ -12,6 +12,7 @@ import {
 } from '../game/constants';
 import { FoodOrb, PlayerState } from '../game/types';
 import { addFoodIfMissing, createRandomFoodOrb, getSharedKelpPositions, removeFoodById, replaceFoods } from '../game/sharedWorld';
+import { updateLeaderboard, beaconUpdateLeaderboard } from '../game/leaderboardTracker';
 import { joystickState } from './VirtualJoystick';
 import { toast } from 'sonner';
 
@@ -347,15 +348,9 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
     if (store.weight <= 0 && !store.dead) {
       store.dead = true;
       store.killerName = payload.attackerName || 'Unknown';
-      const survivalSecs = store.spawnTime > 0 ? Math.floor((Date.now() - store.spawnTime) / 1000) : 0;
-      supabase.from('leaderboard').insert({
-        player_name: store.name,
-        survival_seconds: survivalSecs,
-        kills: store.kills,
-        weight: store.maxWeight,
-      } as any).then(({ error }) => {
-        if (error) console.error('[Aquarium] Failed to save score:', error);
-      });
+      // Update the leaderboard row that was inserted at spawn so the final
+      // weight/kills/survival are recorded for this session.
+      void updateLeaderboard();
       deathTimeout.current = window.setTimeout(() => { store.phase = 'dead'; }, DEATH_DELAY_MS);
     }
 
@@ -528,23 +523,14 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       })
       .subscribe();
 
+    // Periodic update so the leaderboard reflects live progress (every 10s).
+    const lbInterval = window.setInterval(() => {
+      if (!store.dead) void updateLeaderboard();
+    }, 10000);
+
     const handleBeforeUnload = () => {
-      if (!store.dead && store.spawnTime > 0 && store.name) {
-        const survivalSecs = Math.floor((Date.now() - store.spawnTime) / 1000);
-        // sendBeacon can't set custom headers, so the apikey MUST be in the
-        // URL query string. Without it PostgREST silently rejects with 401
-        // — which is why ~1000 sessions only produced 8 leaderboard rows.
-        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/leaderboard?apikey=${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`;
-        navigator.sendBeacon(
-          url,
-          new Blob([JSON.stringify({
-            player_name: store.name,
-            survival_seconds: survivalSecs,
-            kills: store.kills,
-            weight: store.maxWeight,
-          })], { type: 'application/json' })
-        );
-      }
+      // Updates the existing session row (created on join) — no more 401s.
+      beaconUpdateLeaderboard();
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
 
@@ -552,6 +538,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       supabase.removeChannel(channel);
       supabase.removeChannel(biteChannel);
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.clearInterval(lbInterval);
       if (deathTimeout.current) clearTimeout(deathTimeout.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

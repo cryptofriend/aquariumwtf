@@ -69,24 +69,30 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          is_bot: boolean
           kills: number
           player_name: string
+          session_id: string | null
           survival_seconds: number
           weight: number
         }
         Insert: {
           created_at?: string
           id?: string
+          is_bot?: boolean
           kills?: number
           player_name: string
+          session_id?: string | null
           survival_seconds?: number
           weight?: number
         }
         Update: {
           created_at?: string
           id?: string
+          is_bot?: boolean
           kills?: number
           player_name?: string
+          session_id?: string | null
           survival_seconds?: number
           weight?: number
         }

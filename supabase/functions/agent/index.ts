@@ -52,6 +52,18 @@ Deno.serve(async (req) => {
         });
         supabase.removeChannel(channel);
 
+        // Register on the leaderboard so EVERY agent that joins shows up,
+        // flagged as a bot. We reuse agent_id as session_id so subsequent
+        // move/bite calls can update the same row.
+        await supabase.from("leaderboard").insert({
+          session_id: id,
+          player_name: name,
+          weight,
+          kills: 0,
+          survival_seconds: 0,
+          is_bot: true,
+        });
+
         return json({
           ok: true,
           agent_id: id,
@@ -89,6 +101,12 @@ Deno.serve(async (req) => {
           },
         });
         supabase.removeChannel(channel);
+
+        // Keep the bot's leaderboard row fresh.
+        await supabase.from("leaderboard").update({
+          weight: Number(weight) || 1,
+          kills: Number(kills) || 0,
+        }).eq("session_id", agent_id);
 
         return json({ ok: true, position: { x, y, z } });
       }
