@@ -20,25 +20,39 @@ const tmpVec = new THREE.Vector3();
 const PROXIMITY_RANGE = 10;
 export const biteRequest = { pending: false };
 
-/** Broadcast an activity event to the chat channel */
+/** Broadcast an activity event to the chat channel AND persist it
+ *  so it survives page reloads — the aquarium log is permanent. */
 function broadcastActivity(text: string) {
+  const id = crypto.randomUUID();
+  const payload = {
+    id,
+    sender: 'system',
+    color: '#888',
+    text,
+    timestamp: Date.now(),
+    system: true,
+  };
+  // Live broadcast for current viewers
   const ch = supabase.channel('aquarium-chat');
   ch.subscribe((status) => {
     if (status === 'SUBSCRIBED') {
       ch.send({
         type: 'broadcast',
         event: 'activity',
-        payload: {
-          id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          sender: 'system',
-          color: '#888',
-          text,
-          timestamp: Date.now(),
-          system: true,
-        },
+        payload,
       }).then(() => supabase.removeChannel(ch));
     }
   });
+
+  // Persist to chat_messages so the activity log survives reloads.
+  supabase.from('chat_messages').insert({
+    id,
+    room: 'work',
+    sender: 'system',
+    color: '#888',
+    text,
+    system: true,
+  } as any).then(() => {});
 }
 
 interface EatingOrb {

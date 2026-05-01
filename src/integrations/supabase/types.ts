@@ -45,6 +45,7 @@ export type Database = {
           id: string
           room: string
           sender: string
+          system: boolean
           text: string
         }
         Insert: {
@@ -53,6 +54,7 @@ export type Database = {
           id?: string
           room?: string
           sender: string
+          system?: boolean
           text: string
         }
         Update: {
@@ -61,6 +63,7 @@ export type Database = {
           id?: string
           room?: string
           sender?: string
+          system?: boolean
           text?: string
         }
         Relationships: []
