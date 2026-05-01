@@ -81,6 +81,7 @@ export default function Index() {
 
   const handlePlayAgain = useCallback(() => {
     resetStore();
+    resetLeaderboardTracker();
     setPhase('entry');
   }, []);
 
