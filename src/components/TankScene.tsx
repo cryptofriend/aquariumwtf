@@ -462,7 +462,11 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         if (p) callbacksRef.current.upsertRemote(key, parsePlayer(p));
         resolveHost();
         toast(`🐟 ${p?.name || 'Unknown fish'} joined!`, { duration: 3000 });
-        broadcastActivity(`🐟 ${p?.name || 'Unknown fish'} joined the aquarium`);
+        // Only the elected world host persists activity to avoid N duplicates
+        // (one per connected client). The toast still fires locally for everyone.
+        if (isWorldHostRef.current) {
+          broadcastActivity(`🐟 ${p?.name || 'Unknown fish'} joined the aquarium`);
+        }
       })
       .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
         const p = (leftPresences as any[])?.[0];
@@ -470,7 +474,9 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
         resolveHost();
         callbacksRef.current.bumpScene();
         toast(`💨 ${p?.name || 'A fish'} left`, { duration: 3000 });
-        broadcastActivity(`💨 ${p?.name || 'A fish'} left the aquarium`);
+        if (isWorldHostRef.current) {
+          broadcastActivity(`💨 ${p?.name || 'A fish'} left the aquarium`);
+        }
       })
       .on('broadcast', { event: 'player-state' }, ({ payload }) => {
         const p = payload as PlayerBroadcastState;
