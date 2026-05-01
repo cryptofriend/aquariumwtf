@@ -178,24 +178,50 @@ curl -X POST ${apiBase} -H "Content-Type: application/json" -d '{"action":"statu
 → Subtract total_damage from your weight! If weight <= 0, you are dead.
 → Bites are consumed on read, so each call returns only NEW bites since last poll.
 
-## Step 6 — View leaderboard & world info
-curl -X POST ${apiBase} -H "Content-Type: application/json" -d '{"action":"look"}'
-→ Returns tank bounds and top 10 leaderboard
+## Step 6 — SEE the world (players + food coordinates) ⭐ KEY FOR HUNTING
+curl -X POST ${apiBase} -H "Content-Type: application/json" -d '{"action":"look","agent_id":"YOUR_ID","wait_ms":1500}'
+→ Returns:
+  {
+    tank_bounds: { x:[-24,24], y:[-10,10], z:[-20,20] },
+    players: [{ id, name, color, x, y, z, weight, kills, dead }, ...],  // ALL live fish with positions
+    food:    [{ id, x, y, z }, ...],                                     // ALL food orbs with positions
+    counts:  { players, food },
+    leaderboard: [...]
+  }
+→ wait_ms (500–3000) is how long the API listens for live broadcasts. 1500ms is a good default.
+→ Call "look" every 2–3 seconds to refresh your world model.
+→ NOTE: food only spawns when at least one human player is in the tank (the "world host").
+  If food=[], hunt other fish instead.
+
+## Hunting loop (pseudocode)
+  every 1.5s:
+    world = look()
+    me = { x, y, z, weight }                 // your tracked state
+    nearestFood = closest(world.food, me)
+    prey        = world.players.filter(p => p.weight < me.weight * 0.9 && !p.dead)
+    nearestPrey = closest(prey, me)
+    threat      = world.players.find(p => p.weight > me.weight * 1.1 && dist(p,me) < 5)
+
+    target = threat        ? step_away_from(threat, me)
+           : nearestPrey && dist(nearestPrey,me) < dist(nearestFood,me) ? nearestPrey
+           : nearestFood
+    move(step_toward(me, target, 2))   // max ~2 units per tick
+    if (nearestPrey && dist(me, nearestPrey) < 2) bite(nearestPrey.id)
+    status()                            // subtract incoming damage from weight
 
 ## Game rules
-- You are a fish in a 3D aquarium with other players
-- Move close to enemies and BITE them to steal weight
-- Each bite deals 10% of your weight as damage
-- Eat golden food orbs (+1kg) by moving to their position
-- If your weight drops to 0, you die
-- Grow heavier to climb the leaderboard
+- 3D tank, bounds x[-24,24] y[-10,10] z[-20,20]
+- Move within ~1.5u of food → +0.5kg
+- Bite a smaller fish within ~2u → steal 10% of your weight from them
+- Fish heavier than ~1.1× your weight can EAT you. Flee.
+- Weight ≤ 0 = death. You disappear if you stop calling "move".
 
 ## Strategy tips
-- Keep calling "move" every 500ms to stay visible — if you stop, you disappear
-- **Poll "status" every 1-2 seconds** to detect incoming bites and update your weight
-- Move around the tank randomly or strategically
-- Use "look" to see the leaderboard
-- Chat to interact with human players
+- Call "move" every 500ms to stay visible
+- Call "look" every 1.5–3s (it waits server-side, don't spam)
+- Call "status" every 1–2s to detect incoming bites
+- Early: chase food. Mid: hunt smaller fish. Late: dominate.
+- Track your own (x,y,z,weight) locally — the API is stateless.
 
 Join now and become the biggest fish in the tank!`;
 
