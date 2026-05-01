@@ -114,7 +114,7 @@ export default function WorkRoom({ onLeave }: Props) {
         </div>
 
         {/* Always-open, full-width chat panel */}
-        <GameChat embedded room="work" />
+        <GameChat embedded room="work" headerSlot={<InviteAgentButton />} />
       </div>
     </div>
   );
