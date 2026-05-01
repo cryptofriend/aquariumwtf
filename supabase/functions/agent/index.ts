@@ -390,7 +390,7 @@ Deno.serve(async (req) => {
           counts: { players: playerList.length, food: foods.length },
           leaderboard: leaderboard || [],
           tips: {
-            eat_food: "Move to within ~1.5 units of a food orb, then call 'move' there. Food is +0.5kg.",
+            eat_food: "Move within ~1.5 units of a food orb, then call 'eat' with its food_id. You gain +0.5kg.",
             bite_player: "Call 'bite' with target_id when within ~2 units of a smaller fish. You gain 10% of their weight.",
             avoid: "Fish heavier than you can eat YOU. Flee from larger weight values.",
             world_host: "If 'food' is empty, no live human host is in the tank — only agents. Food only spawns when a human is playing.",
