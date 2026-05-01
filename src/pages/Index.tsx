@@ -50,6 +50,7 @@ export default function Index() {
     store.phase = 'playing';
     store.spawnTime = Date.now();
     store.isBot = false;
+    acquireSessionLock(store.name);
     setMode('game');
     setPhase('playing');
     void registerOnLeaderboard();
