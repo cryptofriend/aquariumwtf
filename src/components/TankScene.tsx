@@ -43,6 +43,16 @@ function broadcastActivity(text: string) {
       }).then(() => supabase.removeChannel(ch));
     }
   });
+
+  // Persist to chat_messages so the activity log survives reloads.
+  supabase.from('chat_messages').insert({
+    id,
+    room: 'work',
+    sender: 'system',
+    color: '#888',
+    text,
+    system: true,
+  } as any).then(() => {});
 }
 
 interface EatingOrb {
