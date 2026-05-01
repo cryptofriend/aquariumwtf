@@ -24,9 +24,11 @@ interface Props {
   fillParent?: boolean;
   /** Logical chat room. 'game' = aquarium combat chat, 'work' = work room chat. */
   room?: 'game' | 'work';
+  /** Optional element rendered in the header (e.g. Invite Agent button). */
+  headerSlot?: React.ReactNode;
 }
 
-export default function GameChat({ embedded = false, fillParent = false, room = 'game' }: Props) {
+export default function GameChat({ embedded = false, fillParent = false, room = 'game', headerSlot }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [open, setOpen] = useState(embedded);
