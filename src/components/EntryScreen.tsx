@@ -57,12 +57,17 @@ export default function EntryScreen({ onEnter }: Props) {
       setError('Name already taken!');
       return;
     }
+    if (mode === 'game' && !acquireSessionLock(trimmed)) {
+      setError('Another tab in this browser is already playing. Close it first.');
+      return;
+    }
     channelRef.current?.track({ role: 'player', name: trimmed, mode });
     onEnter(trimmed, mode);
   };
 
   const gameUrl = 'https://aquarium.wtf';
   const isWork = mode === 'work';
+  const blockedByOtherTab = mode === 'game' && !!activeSession;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-y-auto py-8"
