@@ -57,7 +57,7 @@ export default function ChatLeaderboardPanel() {
                 : 'text-zinc-500 hover:text-zinc-300 border-b-2 border-transparent'
             }`}
           >
-            <Trophy size={12} /> Top 10
+            <Trophy size={12} /> Ranks
           </button>
           <button
             onClick={() => setOpen(false)}

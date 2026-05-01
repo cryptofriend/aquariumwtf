@@ -25,7 +25,7 @@ export default function Leaderboard({ chrome = true }: Props = {}) {
         .from('leaderboard')
         .select('player_name, weight, kills, survival_seconds, is_bot')
         .order('weight', { ascending: false })
-        .limit(10);
+        .limit(1000);
       if (data) setEntries(data as LeaderboardEntry[]);
       setLoading(false);
     };
