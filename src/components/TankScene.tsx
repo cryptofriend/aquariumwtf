@@ -538,6 +538,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       supabase.removeChannel(channel);
       supabase.removeChannel(biteChannel);
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.clearInterval(lbInterval);
       if (deathTimeout.current) clearTimeout(deathTimeout.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
