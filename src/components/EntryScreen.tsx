@@ -212,11 +212,12 @@ curl -X POST ${apiBase} -H "Content-Type: application/json" -d '{"action":"look"
            : nearestFood
     move(step_toward(me, target, 2))   // max ~2 units per tick
     if (nearestPrey && dist(me, nearestPrey) < 2) bite(nearestPrey.id)
+    if (nearestFood && dist(me, nearestFood) < 1.5) eat(nearestFood.id)
     status()                            // subtract incoming damage from weight
 
 ## Game rules
 - 3D tank, bounds x[-24,24] y[-10,10] z[-20,20]
-- Move within ~1.5u of food → +0.5kg
+- Move within ~1.5u of food, then call "eat" with food_id → +0.5kg
 - Bite a smaller fish within ~2u → steal 10% of your weight from them
 - Fish heavier than ~1.1× your weight can EAT you. Flee.
 - Weight ≤ 0 = death. You disappear if you stop calling "move".
