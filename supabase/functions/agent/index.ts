@@ -265,18 +265,87 @@ Deno.serve(async (req) => {
         });
       }
 
-      // ─── LOOK (world info) ─────────────────────────
+      // ─── LOOK (world info — live players + food positions) ──
       case "look": {
-        const { data } = await supabase
+        const requesterId = body.agent_id || crypto.randomUUID();
+        const waitMs = Math.min(Math.max(Number(body.wait_ms) || 1500, 500), 3000);
+
+        const players = new Map<string, any>();
+        let foods: any[] = [];
+
+        const channel = supabase.channel("aquarium-live");
+
+        channel
+          .on("broadcast", { event: "player-state" }, ({ payload }: any) => {
+            if (!payload?.id || payload.id === requesterId) return;
+            // Keep most-recent state per player
+            players.set(payload.id, {
+              id: payload.id,
+              name: payload.name,
+              color: payload.color,
+              x: payload.x, y: payload.y, z: payload.z,
+              weight: payload.weight,
+              kills: payload.kills,
+              dead: !!payload.dead,
+            });
+          })
+          .on("broadcast", { event: "world-sync-response" }, ({ payload }: any) => {
+            if (payload?.targetId !== requesterId || !Array.isArray(payload.foods)) return;
+            foods = payload.foods.map((f: any) => ({ id: f.id, x: f.x, y: f.y, z: f.z }));
+          })
+          .on("broadcast", { event: "food-spawned" }, ({ payload }: any) => {
+            const f = payload?.food;
+            if (f && !foods.some(e => e.id === f.id)) foods.push({ id: f.id, x: f.x, y: f.y, z: f.z });
+          })
+          .on("broadcast", { event: "food-eaten" }, ({ payload }: any) => {
+            const fid = payload?.foodId;
+            if (fid) foods = foods.filter(e => e.id !== fid);
+          });
+
+        await new Promise<void>((resolve) => {
+          channel.subscribe(async (status: string) => {
+            if (status === "SUBSCRIBED") {
+              // Ask the World Host to send us the current food list.
+              await channel.send({
+                type: "broadcast",
+                event: "world-sync-request",
+                payload: { requesterId },
+              });
+              resolve();
+            }
+          });
+        });
+
+        // Collect broadcasts for waitMs
+        await new Promise(r => setTimeout(r, waitMs));
+        supabase.removeChannel(channel);
+
+        const playerList = Array.from(players.values());
+
+        // Leaderboard for context
+        const { data: leaderboard } = await supabase
           .from("leaderboard")
-          .select("player_name, weight, kills, survival_seconds")
+          .select("player_name, weight, kills, survival_seconds, is_bot")
           .order("weight", { ascending: false })
           .limit(10);
 
         return json({
           ok: true,
-          tank_bounds: { x: [-TANK_HALF.x, TANK_HALF.x], y: [-TANK_HALF.y, TANK_HALF.y], z: [-TANK_HALF.z, TANK_HALF.z] },
-          leaderboard: data || [],
+          tank_bounds: {
+            x: [-TANK_HALF.x, TANK_HALF.x],
+            y: [-TANK_HALF.y, TANK_HALF.y],
+            z: [-TANK_HALF.z, TANK_HALF.z],
+          },
+          players: playerList,             // [{id,name,color,x,y,z,weight,kills,dead}]
+          food: foods,                     // [{id,x,y,z}]
+          counts: { players: playerList.length, food: foods.length },
+          leaderboard: leaderboard || [],
+          tips: {
+            eat_food: "Move to within ~1.5 units of a food orb, then call 'move' there. Food is +0.5kg.",
+            bite_player: "Call 'bite' with target_id when within ~2 units of a smaller fish. You gain 10% of their weight.",
+            avoid: "Fish heavier than you can eat YOU. Flee from larger weight values.",
+            world_host: "If 'food' is empty, no live human host is in the tank — only agents. Food only spawns when a human is playing.",
+          },
         });
       }
 
