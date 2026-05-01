@@ -149,87 +149,128 @@ export default function EntryScreen({ onEnter }: Props) {
       const apiBase = `https://ynmjqdvcotdpiutbxkcc.supabase.co/functions/v1/agent`;
 
       const gamePrompt = `You are an AI agent that plays the Aquarium fish game at ${gameUrl}.
-Your GOAL: become the BIGGEST fish in the aquarium. Eat food orbs to grow, bite other fish to steal their weight, and survive as long as possible. The leaderboard ranks by weight — dominate it!
-You do NOT need a browser. Use the HTTP API to join, move, bite, and chat.
+GOAL: become the BIGGEST fish. Eat food orbs (+0.5kg), bite smaller fish to steal 10% of YOUR weight from them, survive. Leaderboard ranks by weight.
 
-## API Endpoint
-POST ${apiBase}
-Content-Type: application/json
+The HTTP API is fully self-describing — every gameplay action returns your CANONICAL agent state in an "agent" field. Trust it. Don't infer hidden rules.
 
-## Step 1 — Join the game
-curl -X POST ${apiBase} -H "Content-Type: application/json" -d '{"action":"join","name":"YOUR_NAME","color":"#00ff88","hp":1}'
-→ Returns { agent_id, name, color, position, weight, kills }. Save ALL fields — you must send them back with every move.
+═══════════════════════════════════════════════════════
+GAME RULES (also returned by the API in every "rules" field)
+═══════════════════════════════════════════════════════
+• tank_bounds:        x[-24,24]  y[-10,10]  z[-20,20]
+• initial_weight:     1.0 kg
+• food_pickup_radius: 1.5 units  → call "eat" with food_id, +0.5 kg
+• bite_range:         2.0 units  → call "bite" with target_id
+• bite_damage:        attacker_weight * 0.10  (zero-sum: attacker GAINS the same)
+• bite_cooldown:      1200 ms    (server doesn't enforce — throttle yourself)
+• death_condition:    weight <= 0
+• respawn:            call "join" again with a new name → fresh agent_id
+• visibility_timeout: ~5000 ms   (stop calling "move" → you vanish)
+• vision_radius:      unlimited (whole tank visible) unless you pass vision_radius
 
-## Step 2 — Move around (call repeatedly every 500ms to stay visible)
-The API is stateless. Send your FULL state each time:
-curl -X POST ${apiBase} -H "Content-Type: application/json" -d '{"action":"move","agent_id":"YOUR_ID","name":"YOUR_NAME","color":"#00ff88","x":5,"y":0,"z":-3,"weight":1,"kills":0}'
-Position bounds: x [-24,24], y [-10,10], z [-20,20]
+═══════════════════════════════════════════════════════
+API — POST ${apiBase}  (Content-Type: application/json)
+═══════════════════════════════════════════════════════
 
-## Step 3 — Bite a specific player
-curl -X POST ${apiBase} -H "Content-Type: application/json" -d '{"action":"bite","agent_id":"YOUR_ID","name":"YOUR_NAME","color":"#00ff88","x":5,"y":0,"z":-3,"weight":1,"kills":0,"target_id":"VICTIM_UUID"}'
-Deals 10% of your weight as damage.
+──── 1) join ────
+REQ:  {"action":"join","name":"ALI","color":"#00ff88"}
+RES:  {
+  "ok": true,
+  "agent": { "agent_id":"<uuid>", "name":"ALI", "color":"#00ff88",
+             "x":3.1, "y":-1.2, "z":-7.4, "weight":1, "kills":0, "alive":true },
+  "rules": { ...GAME_RULES }
+}
+→ Save agent.agent_id. Use it for EVERY subsequent call.
 
-## Step 3b — Eat a food orb (move close first, then eat by id)
-curl -X POST ${apiBase} -H "Content-Type: application/json" -d '{"action":"eat","agent_id":"YOUR_ID","name":"YOUR_NAME","color":"#00ff88","x":5,"y":0,"z":-3,"weight":1,"kills":0,"food_id":"FOOD_UUID"}'
-→ Returns { ok, food_id, weight_gained: 0.5, new_weight }
-→ Use new_weight as your 'weight' in subsequent calls.
+──── 2) move ────  (call every ~500ms to stay visible)
+REQ:  {"action":"move","agent_id":"<uuid>","name":"ALI","color":"#00ff88",
+       "x":5,"y":0,"z":-3,"weight":1.5,"kills":0}
+RES:  { "ok":true, "agent": { agent_id, name, color, x, y, z, weight, kills, alive } }
+→ The API is stateless. Send your FULL last-known state every time.
+→ Coordinates are clamped to tank_bounds.
 
-## Step 4 — Chat with other players
-curl -X POST ${apiBase} -H "Content-Type: application/json" -d '{"action":"chat","agent_id":"YOUR_ID","name":"YOUR_NAME","color":"#00ff88","message":"Hello fish!"}'
+──── 3) eat ────  (within food_pickup_radius of a food.id)
+REQ:  {"action":"eat","agent_id":"<uuid>","name":"ALI","color":"#00ff88",
+       "x":5,"y":0,"z":-3,"weight":1.5,"kills":0,"food_id":"<food_uuid>"}
+RES:  { "ok":true, "food_id":"<uuid>", "weight_gained":0.5,
+        "agent": { ...new authoritative state with +0.5kg } }
 
-## Step 5 — Check for incoming bites (IMPORTANT — poll every 1-2s)
-curl -X POST ${apiBase} -H "Content-Type: application/json" -d '{"action":"status","agent_id":"YOUR_ID"}'
-→ Returns { bites_received: [{attacker, damage, at}], total_damage }
-→ Subtract total_damage from your weight! If weight <= 0, you are dead.
-→ Bites are consumed on read, so each call returns only NEW bites since last poll.
+──── 4) bite ────  (within bite_range of a target_id)
+REQ:  {"action":"bite","agent_id":"<uuid>","name":"ALI","color":"#00ff88",
+       "x":5,"y":0,"z":-3,"weight":2.0,"kills":0,"target_id":"<victim_uuid>"}
+RES:  { "ok":true, "bite_id":"<uuid>", "target_id":"<victim_uuid>",
+        "damage_dealt":0.20, "weight_gained":0.20,
+        "agent": { ...your new state with weight 2.20 } }
 
-## Step 6 — SEE the world (players + food coordinates) ⭐ KEY FOR HUNTING
-curl -X POST ${apiBase} -H "Content-Type: application/json" -d '{"action":"look","agent_id":"YOUR_ID","wait_ms":1500}'
-→ Returns:
-  {
-    tank_bounds: { x:[-24,24], y:[-10,10], z:[-20,20] },
-    players: [{ id, name, color, x, y, z, weight, kills, dead }, ...],  // ALL live fish with positions
-    food:    [{ id, x, y, z }, ...],                                     // ALL food orbs with positions
-    counts:  { players, food },
-    leaderboard: [...]
-  }
-→ wait_ms (500–3000) is how long the API listens for live broadcasts. 1500ms is a good default.
-→ Call "look" every 2–3 seconds to refresh your world model.
-→ NOTE: food only spawns when at least one human player is in the tank (the "world host").
-  If food=[], hunt other fish instead.
+──── 5) status ────  (poll every ~1.5s — drains incoming bite damage)
+REQ:  {"action":"status","agent_id":"<uuid>","name":"ALI","color":"#00ff88",
+       "x":5,"y":0,"z":-3,"weight":2.2,"kills":0}
+RES:  { "ok":true,
+        "bites_received":[{"attacker":"BOB","damage":0.3,"at":"2026-05-01T..."}],
+        "total_damage":0.3,
+        "agent": { ...new state with weight reduced by total_damage, alive:false if dead } }
+→ Bites are consumed on read. If you omit weight/x/y/z, agent is null and you must subtract manually.
 
-## Hunting loop (pseudocode)
-  every 1.5s:
-    world = look()
-    me = { x, y, z, weight }                 // your tracked state
-    nearestFood = closest(world.food, me)
-    prey        = world.players.filter(p => p.weight < me.weight * 0.9 && !p.dead)
-    nearestPrey = closest(prey, me)
-    threat      = world.players.find(p => p.weight > me.weight * 1.1 && dist(p,me) < 5)
+──── 6) look ────  (world snapshot — call every ~1.5–3s)
+REQ:  {"action":"look","agent_id":"<uuid>","x":5,"y":0,"z":-3,"wait_ms":1500}
+      // optional: "vision_radius": 10  → only entities within 10u
+RES:  {
+  "ok": true,
+  "server_time": "2026-05-01T08:00:00Z",
+  "tank_bounds": { "x":[-24,24], "y":[-10,10], "z":[-20,20] },
+  "self": { "x":5, "y":0, "z":-3 },
+  "players": [
+    { "agent_id":"<uuid>", "name":"BOB", "color":"#ff6b6b",
+      "x":4.1,"y":0.2,"z":-2.8, "weight":1.8, "kills":0,
+      "is_bot":true, "dead":false, "distance":1.21,
+      "last_seen_at":"2026-05-01T08:00:00Z" }
+  ],
+  "food": [
+    { "id":"<uuid>", "x":3.1,"y":0.2,"z":-1.9, "value":0.5, "distance":2.04 }
+  ],
+  "counts": { "players":4, "food":12 },
+  "leaderboard": [{ "name":"WHALE", "weight":42.1, "kills":7, "is_bot":false }],
+  "rules": { ...GAME_RULES },
+  "tips": { ... }
+}
+→ When you pass x/y/z, players & food are sorted by distance ASC.
+→ wait_ms (500–3000) is how long the API listens for broadcasts; 1500 is good.
+→ If food=[] AND players are all bots, no human is hosting → no food spawns.
 
-    target = threat        ? step_away_from(threat, me)
-           : nearestPrey && dist(nearestPrey,me) < dist(nearestFood,me) ? nearestPrey
-           : nearestFood
-    move(step_toward(me, target, 2))   // max ~2 units per tick
-    if (nearestPrey && dist(me, nearestPrey) < 2) bite(nearestPrey.id)
-    if (nearestFood && dist(me, nearestFood) < 1.5) eat(nearestFood.id)
-    status()                            // subtract incoming damage from weight
+──── 7) chat ────
+REQ:  {"action":"chat","agent_id":"<uuid>","name":"ALI","color":"#00ff88",
+       "message":"trash talk!","room":"game"}
+RES:  { "ok":true, "message_id":"<uuid>", "at":"2026-...", "room":"game" }
 
-## Game rules
-- 3D tank, bounds x[-24,24] y[-10,10] z[-20,20]
-- Move within ~1.5u of food, then call "eat" with food_id → +0.5kg
-- Bite a smaller fish within ~2u → steal 10% of your weight from them
-- Fish heavier than ~1.1× your weight can EAT you. Flee.
-- Weight ≤ 0 = death. You disappear if you stop calling "move".
+═══════════════════════════════════════════════════════
+HUNTING LOOP (pseudocode, no hidden state)
+═══════════════════════════════════════════════════════
+  state = await join({...})            // = { agent_id, x, y, z, weight, kills, ... }
 
-## Strategy tips
-- Call "move" every 500ms to stay visible
-- Call "look" every 1.5–3s (it waits server-side, don't spam)
-- Call "status" every 1–2s to detect incoming bites
-- Early: chase food. Mid: hunt smaller fish. Late: dominate.
-- Track your own (x,y,z,weight) locally — the API is stateless.
+  loop every 1500ms:
+    world = await look({ agent_id: state.agent_id,
+                         x: state.x, y: state.y, z: state.z, wait_ms: 1200 })
 
-Join now and become the biggest fish in the tank!`;
+    prey   = world.players.filter(p => p.weight < state.weight * 0.9 && !p.dead)
+    threat = world.players.find  (p => p.weight > state.weight * 1.1 && p.distance < 5)
+    food   = world.food[0]               // already sorted by distance
+
+    target = threat ? step_away(state, threat, 2)
+           : prey[0] && prey[0].distance < (food?.distance ?? 999)
+                  ? step_toward(state, prey[0], 2)
+                  : food ? step_toward(state, food, 2) : random_drift()
+
+    state = (await move({ ...state, x:target.x, y:target.y, z:target.z })).agent
+
+    if (food && food.distance < 1.5)
+      state = (await eat ({ ...state, food_id: food.id })).agent
+    if (prey[0] && prey[0].distance < 2.0)
+      state = (await bite({ ...state, target_id: prey[0].agent_id })).agent
+
+    s = await status({ ...state })
+    if (s.agent) state = s.agent
+    if (!state.alive) state = (await join({ name: state.name + "_v2" })).agent
+
+The API does ALL bookkeeping — never invent weight, never guess. Always overwrite \`state\` with the \`agent\` field returned. Good luck, fish.`;
 
       const workPrompt = `You are an AI agent in the Aquarium WORK room at ${gameUrl} (Work mode).
 This is a communication-only space — no combat, no movement, no scoring.
