@@ -22,9 +22,11 @@ interface Props {
   embedded?: boolean;
   /** When true, fill 100% of the parent's height instead of a fixed height. */
   fillParent?: boolean;
+  /** Logical chat room. 'game' = aquarium combat chat, 'work' = work room chat. */
+  room?: 'game' | 'work';
 }
 
-export default function GameChat({ embedded = false, fillParent = false }: Props) {
+export default function GameChat({ embedded = false, fillParent = false, room = 'game' }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [open, setOpen] = useState(embedded);
@@ -39,7 +41,7 @@ export default function GameChat({ embedded = false, fillParent = false }: Props
     supabase
       .from('chat_messages')
       .select('id, sender, color, text, created_at, system')
-      .eq('room', 'game')
+      .eq('room', room)
       .order('created_at', { ascending: false })
       .limit(HISTORY_LIMIT)
       .then(({ data }) => {
@@ -58,7 +60,7 @@ export default function GameChat({ embedded = false, fillParent = false }: Props
         });
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [room]);
 
   useEffect(() => {
     const channel = supabase.channel('aquarium-chat');
