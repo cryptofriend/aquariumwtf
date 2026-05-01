@@ -23,7 +23,7 @@ export const biteRequest = { pending: false };
 /** Broadcast an activity event to the chat channel AND persist it
  *  so it survives page reloads — the aquarium log is permanent. */
 function broadcastActivity(text: string) {
-  const id = `act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const id = crypto.randomUUID();
   const payload = {
     id,
     sender: 'system',
