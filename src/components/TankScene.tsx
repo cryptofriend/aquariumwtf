@@ -12,6 +12,7 @@ import {
 } from '../game/constants';
 import { FoodOrb, PlayerState } from '../game/types';
 import { addFoodIfMissing, createRandomFoodOrb, getSharedKelpPositions, removeFoodById, replaceFoods } from '../game/sharedWorld';
+import { updateLeaderboard, beaconUpdateLeaderboard } from '../game/leaderboardTracker';
 import { joystickState } from './VirtualJoystick';
 import { toast } from 'sonner';
 
