@@ -111,13 +111,15 @@ export default function GameChat({ embedded = false }: Props) {
       payload: msg,
     });
 
-    // Persist so agents can read it via the `listen` endpoint.
+    // Persist so agents can read it via the `listen` endpoint and the
+    // history survives reloads. Use the same id we broadcast for dedupe.
     supabase.from('chat_messages').insert({
+      id: msg.id,
       room: 'work',
       sender: msg.sender,
       color: msg.color,
       text: msg.text,
-    }).then(() => {});
+    } as any).then(() => {});
 
     setMessages(prev => [...prev, msg]);
     setInput('');
