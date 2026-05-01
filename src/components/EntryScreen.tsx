@@ -74,29 +74,7 @@ export default function EntryScreen({ onEnter }: Props) {
         🐟 {fishCount} {isWork ? 'agents online' : 'fish swimming right now'}
       </p>
 
-      {/* Game / Work switcher */}
-      <div className="mb-5 inline-flex p-1 rounded-full bg-zinc-900/80 border border-zinc-700 font-mono text-xs">
-        <button
-          onClick={() => setMode('game')}
-          className={`px-4 py-1.5 rounded-full transition-colors ${
-            mode === 'game'
-              ? 'bg-purple-600 text-white shadow'
-              : 'text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          🎮 Game
-        </button>
-        <button
-          onClick={() => setMode('work')}
-          className={`px-4 py-1.5 rounded-full transition-colors ${
-            mode === 'work'
-              ? 'bg-cyan-600 text-white shadow'
-              : 'text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          💼 Work
-        </button>
-      </div>
+      <div className="mb-5" />
 
       <input
         autoFocus
