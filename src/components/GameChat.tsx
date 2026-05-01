@@ -13,7 +13,9 @@ interface ChatMessage {
   system?: boolean;
 }
 
-const MAX_MESSAGES = 80;
+// How many historical rows to load on mount. The aquarium chat is meant to
+// be a permanent log — bump high. (Realtime keeps adding new ones live.)
+const HISTORY_LIMIT = 1000;
 
 interface Props {
   /** When true, render inline (always open, full width of parent, no floating button). */
@@ -28,30 +30,29 @@ export default function GameChat({ embedded = false }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // Backfill recent chat history from the persisted table on mount,
-  // so late joiners (humans or agents) see what was said before.
+  // Backfill the FULL chat & activity history on mount so nothing is lost
+  // between sessions. Late joiners see the entire conversation.
   useEffect(() => {
     let cancelled = false;
     supabase
       .from('chat_messages')
-      .select('id, sender, color, text, created_at')
+      .select('id, sender, color, text, created_at, system')
       .eq('room', 'work')
       .order('created_at', { ascending: false })
-      .limit(MAX_MESSAGES)
+      .limit(HISTORY_LIMIT)
       .then(({ data }) => {
         if (cancelled || !data) return;
-        const history: ChatMessage[] = data.reverse().map((m) => ({
+        const history: ChatMessage[] = data.reverse().map((m: any) => ({
           id: m.id,
           sender: m.sender,
           color: m.color,
           text: m.text,
           timestamp: new Date(m.created_at).getTime(),
+          system: !!m.system,
         }));
         setMessages((prev) => {
-          // Merge, dedupe by id, keep last MAX_MESSAGES
           const seen = new Set(prev.map((p) => p.id));
-          const merged = [...history.filter((h) => !seen.has(h.id)), ...prev];
-          return merged.slice(-MAX_MESSAGES);
+          return [...history.filter((h) => !seen.has(h.id)), ...prev];
         });
       });
     return () => { cancelled = true; };
@@ -66,13 +67,16 @@ export default function GameChat({ embedded = false }: Props) {
         const msg = payload as ChatMessage;
         setMessages(prev => {
           if (prev.some((p) => p.id === msg.id)) return prev;
-          return [...prev.slice(-(MAX_MESSAGES - 1)), msg];
+          return [...prev, msg];
         });
         if (!msg.system) setUnread(prev => prev + 1);
       })
       .on('broadcast', { event: 'activity' }, ({ payload }) => {
         const msg = payload as ChatMessage;
-        setMessages(prev => [...prev.slice(-(MAX_MESSAGES - 1)), { ...msg, system: true }]);
+        setMessages(prev => {
+          if (prev.some((p) => p.id === msg.id)) return prev;
+          return [...prev, { ...msg, system: true }];
+        });
       })
       .subscribe();
 
