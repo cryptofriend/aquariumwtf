@@ -167,13 +167,16 @@ export default function GameChat({ embedded = false, fillParent = false, room = 
       >
         {/* Header (hidden in fillParent mode — parent provides its own tab header) */}
         {!fillParent && (
-          <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-700/50">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-700/50 gap-2">
             <span className="text-cyan-300 text-xs font-bold uppercase tracking-wider">💬 Chat & Log</span>
-            {!embedded && (
-              <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-zinc-300">
-                <X size={14} />
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {headerSlot}
+              {!embedded && (
+                <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-zinc-300">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
           </div>
         )}
 
