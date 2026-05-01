@@ -39,7 +39,7 @@ export default function GameChat({ embedded = false, fillParent = false }: Props
     supabase
       .from('chat_messages')
       .select('id, sender, color, text, created_at, system')
-      .eq('room', 'work')
+      .eq('room', 'game')
       .order('created_at', { ascending: false })
       .limit(HISTORY_LIMIT)
       .then(({ data }) => {
@@ -117,7 +117,7 @@ export default function GameChat({ embedded = false, fillParent = false }: Props
     // history survives reloads. Use the same id we broadcast for dedupe.
     supabase.from('chat_messages').insert({
       id: msg.id,
-      room: 'work',
+      room: 'game',
       sender: msg.sender,
       color: msg.color,
       text: msg.text,
