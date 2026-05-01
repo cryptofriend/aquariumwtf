@@ -81,6 +81,53 @@ Deno.serve(async (req) => {
       case "join": {
         const name = (body.name || `Bot_${Math.floor(Math.random() * 9999)}`).slice(0, 16);
         const color = body.color || "#70a1ff";
+
+        // ── Enforce ONE fish per agent name ──
+        // Look up any existing bot rows that share this name. If one was active
+        // recently, return it (so the agent reconnects to the SAME fish).
+        // Otherwise mark stale rows as dead so they stop cluttering the tank.
+        const STALE_MS = 15_000;
+        const { data: existing } = await supabase
+          .from("leaderboard")
+          .select("id, session_id, player_name, weight, kills, created_at, is_bot")
+          .eq("player_name", name)
+          .eq("is_bot", true)
+          .order("created_at", { ascending: false })
+          .limit(5);
+
+        const fresh = (existing || []).find(
+          (r: any) => r.session_id && (Date.now() - new Date(r.created_at).getTime()) < STALE_MS,
+        );
+
+        if (fresh) {
+          return json({
+            ok: true,
+            reused: true,
+            agent: buildAgentState({
+              agent_id: String(fresh.session_id),
+              name: fresh.player_name,
+              color,
+              x: 0, y: 0, z: 0,
+              weight: Number(fresh.weight) || GAME_RULES.initial_weight_kg,
+              kills: Number(fresh.kills) || 0,
+              alive: true,
+            }),
+            rules: GAME_RULES,
+            message: `Reusing existing agent '${name}'. Only one fish per name is allowed — keep using this agent_id.`,
+            // legacy
+            agent_id: String(fresh.session_id), name: fresh.player_name, color,
+            weight: Number(fresh.weight), kills: Number(fresh.kills),
+          });
+        }
+
+        // Sweep stale rows that share this name so we don't accumulate ghosts.
+        const staleIds = (existing || []).map((r: any) => r.id);
+        if (staleIds.length > 0) {
+          await supabase.from("leaderboard")
+            .update({ weight: 0 })
+            .in("id", staleIds);
+        }
+
         const id = crypto.randomUUID();
         const x = (Math.random() - 0.5) * TANK_HALF.x;
         const y = (Math.random() - 0.5) * TANK_HALF.y * 0.5;
@@ -107,10 +154,10 @@ Deno.serve(async (req) => {
 
         return json({
           ok: true,
+          reused: false,
           agent: buildAgentState({ agent_id: id, name, color, x, y, z, weight, kills: 0, alive: true }),
           rules: GAME_RULES,
-          message: `${name} joined! Send your full state with every move call. Poll "status" to check for incoming bites.`,
-          // legacy fields kept for backwards compatibility
+          message: `${name} joined! Only ONE fish per name — reuse this agent_id for all subsequent calls.`,
           agent_id: id, name, color, position: { x, y, z }, weight, kills: 0,
         });
       }
