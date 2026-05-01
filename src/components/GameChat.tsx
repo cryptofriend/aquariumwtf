@@ -98,7 +98,7 @@ export default function GameChat({ embedded = false }: Props) {
 
     const store = getStore();
     const msg: ChatMessage = {
-      id: `${uid}-${Date.now()}`,
+      id: crypto.randomUUID(),
       sender: store.name || 'Anonymous',
       color: store.color,
       text: text.slice(0, 200),
