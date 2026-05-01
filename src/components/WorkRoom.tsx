@@ -35,12 +35,12 @@ export default function WorkRoom({ onLeave }: Props) {
         const announce = supabase.channel('aquarium-chat-work');
         announce.subscribe((s) => {
           if (s === 'SUBSCRIBED') {
-            const id = `work-join-${Date.now()}`;
-            const text = `💼 ${store.name} entered the work room`;
+            const id = crypto.randomUUID();
+            const text = `💼 ${store.name} joined the chat`;
             announce.send({
               type: 'broadcast',
               event: 'activity',
-              payload: { id, text, system: true },
+              payload: { id, text, system: true, timestamp: Date.now() },
             }).then(() => supabase.removeChannel(announce));
             // Persist so the join shows up in history for late joiners.
             supabase.from('chat_messages').insert({
