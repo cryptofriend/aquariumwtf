@@ -63,7 +63,8 @@ export default function GameChat({ embedded = false, fillParent = false, room = 
   }, [room]);
 
   useEffect(() => {
-    const channel = supabase.channel('aquarium-chat');
+    setMessages([]);
+    const channel = supabase.channel(`aquarium-chat-${room}`);
     channelRef.current = channel;
 
     channel
@@ -87,7 +88,7 @@ export default function GameChat({ embedded = false, fillParent = false, room = 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [room]);
 
   useEffect(() => {
     if (open) {
@@ -119,7 +120,7 @@ export default function GameChat({ embedded = false, fillParent = false, room = 
     // history survives reloads. Use the same id we broadcast for dedupe.
     supabase.from('chat_messages').insert({
       id: msg.id,
-      room: 'game',
+      room,
       sender: msg.sender,
       color: msg.color,
       text: msg.text,
@@ -127,7 +128,7 @@ export default function GameChat({ embedded = false, fillParent = false, room = 
 
     setMessages(prev => [...prev, msg]);
     setInput('');
-  }, [input]);
+  }, [input, room]);
 
   if (!embedded && !open) {
     return (
