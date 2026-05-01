@@ -1,9 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import EntryScreen, { type AquariumMode } from '../components/EntryScreen';
 import DeathScreen from '../components/DeathScreen';
 import GameUI from '../components/GameUI';
 import Tank3D from '../components/Tank3D';
-import WorkRoom from '../components/WorkRoom';
 import { getStore, resetStore } from '../game/useGameStore';
 import { GamePhase } from '../game/types';
 import { FISH_COLORS } from '../game/constants';
@@ -27,6 +27,7 @@ export default function Index() {
   const [finalKills, setFinalKills] = useState(0);
   const [finalWeight, setFinalWeight] = useState(1);
   const portalHandled = useRef(false);
+  const navigate = useNavigate();
 
   // Handle incoming portal users — skip entry screen (game mode only)
   useEffect(() => {
@@ -56,11 +57,15 @@ export default function Index() {
   const handleEnter = useCallback((name: string, selectedMode: AquariumMode) => {
     const store = getStore();
     store.name = name;
+    if (selectedMode === 'work') {
+      navigate('/chat');
+      return;
+    }
     store.phase = 'playing';
     store.spawnTime = Date.now();
     setMode(selectedMode);
     setPhase('playing');
-  }, []);
+  }, [navigate]);
 
   const handleSpectate = useCallback(() => {
     const store = getStore();
