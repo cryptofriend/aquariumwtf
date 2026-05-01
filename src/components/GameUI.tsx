@@ -165,22 +165,42 @@ export default function GameUI({ phase }: { phase: GamePhase }) {
 
       {/* Rules panel */}
       {showRules && (
-        <div className="absolute bottom-36 right-4 pointer-events-auto bg-black/80 backdrop-blur-md border border-zinc-700 rounded-lg p-4 w-64">
+        <div className="absolute bottom-36 right-4 pointer-events-auto bg-black/80 backdrop-blur-md border border-zinc-700 rounded-lg p-4 w-72 max-h-[70vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-2">
             <span className="text-purple-400 text-xs font-bold uppercase tracking-wider">Game Rules</span>
             <button onClick={() => setShowRules(false)} className="text-zinc-500 hover:text-zinc-300">
               <X size={14} />
             </button>
           </div>
-          <ul className="text-zinc-300 text-[11px] space-y-1.5 list-disc list-inside">
-            <li>Swim with <span className="text-yellow-300">WASD</span>, rise/dive with <span className="text-yellow-300">Q/E</span></li>
-            <li>Move mouse to attract your fish</li>
-            <li>Get close to enemies and <span className="text-red-400">BITE</span> them</li>
-            <li>Each bite steals <span className="text-amber-400">10%</span> of your weight from them</li>
-            <li>Grow heavier to become the biggest fish</li>
-            <li>If your weight drops to 0, you die</li>
-            <li>Last fish swimming wins!</li>
-          </ul>
+
+          {/* Goal */}
+          <div className="mb-3 p-2 rounded-md bg-amber-500/10 border border-amber-500/30">
+            <div className="text-amber-300 text-[10px] font-bold uppercase tracking-wider mb-1">🏆 Goal</div>
+            <p className="text-zinc-200 text-[11px] leading-snug">
+              Become the <span className="text-amber-300 font-bold">biggest fish</span> in the aquarium and dominate the leaderboard.
+            </p>
+          </div>
+
+          {/* How to grow */}
+          <div className="mb-3">
+            <div className="text-emerald-300 text-[10px] font-bold uppercase tracking-wider mb-1">📈 How to grow</div>
+            <ul className="text-zinc-300 text-[11px] space-y-1 list-disc list-inside">
+              <li>Eat <span className="text-emerald-300">🌿 seaweed</span> orbs (+1kg each)</li>
+              <li><span className="text-red-400">Bite</span> other fish to steal <span className="text-amber-400">10%</span> of their weight</li>
+              <li>Survive longer to climb the ranks</li>
+              <li>Avoid bigger fish — if your weight hits <span className="text-red-400">0</span>, you die permanently</li>
+            </ul>
+          </div>
+
+          {/* Controls */}
+          <div>
+            <div className="text-cyan-300 text-[10px] font-bold uppercase tracking-wider mb-1">🎮 Controls</div>
+            <ul className="text-zinc-300 text-[11px] space-y-1 list-disc list-inside">
+              <li>Swim with <span className="text-yellow-300">WASD</span>, rise/dive with <span className="text-yellow-300">Q/E</span></li>
+              <li>Move mouse to attract your fish</li>
+              <li>Get close to enemies — auto-bite triggers in range</li>
+            </ul>
+          </div>
         </div>
       )}
 
