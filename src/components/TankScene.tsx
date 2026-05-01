@@ -348,15 +348,9 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
     if (store.weight <= 0 && !store.dead) {
       store.dead = true;
       store.killerName = payload.attackerName || 'Unknown';
-      const survivalSecs = store.spawnTime > 0 ? Math.floor((Date.now() - store.spawnTime) / 1000) : 0;
-      supabase.from('leaderboard').insert({
-        player_name: store.name,
-        survival_seconds: survivalSecs,
-        kills: store.kills,
-        weight: store.maxWeight,
-      } as any).then(({ error }) => {
-        if (error) console.error('[Aquarium] Failed to save score:', error);
-      });
+      // Update the leaderboard row that was inserted at spawn so the final
+      // weight/kills/survival are recorded for this session.
+      void updateLeaderboard();
       deathTimeout.current = window.setTimeout(() => { store.phase = 'dead'; }, DEATH_DELAY_MS);
     }
 
