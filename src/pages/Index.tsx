@@ -79,12 +79,6 @@ export default function Index() {
     setPhase('entry');
   }, []);
 
-  const handleLeaveWork = useCallback(() => {
-    resetStore();
-    setMode('game');
-    setPhase('entry');
-  }, []);
-
   useEffect(() => {
     if (mode !== 'game') return;
     const id = setInterval(() => {
@@ -104,10 +98,6 @@ export default function Index() {
   return (
     <>
       {phase === 'entry' && <EntryScreen onEnter={handleEnter} />}
-
-      {phase === 'playing' && !inGame && (
-        <WorkRoom onLeave={handleLeaveWork} />
-      )}
 
       {inGame && (phase === 'playing' || phase === 'spectate' || phase === 'dead') && (
         <>
