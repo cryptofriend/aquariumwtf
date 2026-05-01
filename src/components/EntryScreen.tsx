@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { acquireSessionLock, getActiveSession, subscribeSessionLock } from '@/game/sessionLock';
 
 export type AquariumMode = 'game' | 'work';
 
@@ -16,6 +17,13 @@ export default function EntryScreen({ onEnter }: Props) {
   const [showAgentInfo, setShowAgentInfo] = useState(false);
   const [copied, setCopied] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const [activeSession, setActiveSession] = useState<{ name: string } | null>(getActiveSession());
+
+  useEffect(() => {
+    const update = () => setActiveSession(getActiveSession());
+    update();
+    return subscribeSessionLock(update);
+  }, []);
 
   useEffect(() => {
     const channel = supabase.channel('lobby-stats');
@@ -49,12 +57,17 @@ export default function EntryScreen({ onEnter }: Props) {
       setError('Name already taken!');
       return;
     }
+    if (mode === 'game' && !acquireSessionLock(trimmed)) {
+      setError('Another tab in this browser is already playing. Close it first.');
+      return;
+    }
     channelRef.current?.track({ role: 'player', name: trimmed, mode });
     onEnter(trimmed, mode);
   };
 
   const gameUrl = 'https://aquarium.wtf';
   const isWork = mode === 'work';
+  const blockedByOtherTab = mode === 'game' && !!activeSession;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-y-auto py-8"
@@ -89,8 +102,15 @@ export default function EntryScreen({ onEnter }: Props) {
       {error && !isTaken && <p className="text-red-400 text-xs font-mono mb-2">{error}</p>}
       {!isTaken && !error && <div className="mb-3" />}
 
+      {blockedByOtherTab && (
+        <div className="w-72 mb-3 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/40 text-red-300 font-mono text-[11px] text-center">
+          ⚠ Already playing as <span className="font-bold">{activeSession?.name}</span> in another tab.
+          <br />Close that tab to play here.
+        </div>
+      )}
+
       <button
-        disabled={!trimmed || isTaken}
+        disabled={!trimmed || isTaken || blockedByOtherTab}
         onClick={handleEnter}
         className={`px-8 py-3 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed text-white font-mono font-bold text-lg transition-colors ${
           isWork ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-red-600 hover:bg-red-500'

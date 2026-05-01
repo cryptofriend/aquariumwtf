@@ -8,6 +8,7 @@ import { getStore, resetStore } from '../game/useGameStore';
 import { registerOnLeaderboard, resetLeaderboardTracker } from '../game/leaderboardTracker';
 import { GamePhase } from '../game/types';
 import { FISH_COLORS } from '../game/constants';
+import { acquireSessionLock, releaseSessionLock } from '../game/sessionLock';
 
 function getPortalParams() {
   const params = new URLSearchParams(window.location.search);
@@ -49,6 +50,7 @@ export default function Index() {
     store.phase = 'playing';
     store.spawnTime = Date.now();
     store.isBot = false;
+    acquireSessionLock(store.name);
     setMode('game');
     setPhase('playing');
     void registerOnLeaderboard();
@@ -80,6 +82,7 @@ export default function Index() {
   }, []);
 
   const handlePlayAgain = useCallback(() => {
+    releaseSessionLock();
     resetStore();
     resetLeaderboardTracker();
     setPhase('entry');
