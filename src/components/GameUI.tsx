@@ -5,7 +5,6 @@ import { TANK_HALF, BITE_COOLDOWN_MS } from '../game/constants';
 import { biteRequest } from './TankScene';
 import { Move, ArrowUpDown, Bug, Info, X, Smartphone } from 'lucide-react';
 import { useIsMobile } from '../hooks/use-mobile';
-import GameChat from './GameChat';
 import VirtualJoystick from './VirtualJoystick';
 import ChatLeaderboardPanel from './ChatLeaderboardPanel';
 import { GamePhase } from '../game/types';
