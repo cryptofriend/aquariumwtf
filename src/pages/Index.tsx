@@ -5,6 +5,7 @@ import DeathScreen from '../components/DeathScreen';
 import GameUI from '../components/GameUI';
 import Tank3D from '../components/Tank3D';
 import { getStore, resetStore } from '../game/useGameStore';
+import { registerOnLeaderboard, resetLeaderboardTracker } from '../game/leaderboardTracker';
 import { GamePhase } from '../game/types';
 import { FISH_COLORS } from '../game/constants';
 
@@ -47,8 +48,10 @@ export default function Index() {
     }
     store.phase = 'playing';
     store.spawnTime = Date.now();
+    store.isBot = false;
     setMode('game');
     setPhase('playing');
+    void registerOnLeaderboard();
 
     // Clean URL
     window.history.replaceState({}, '', window.location.pathname);
@@ -63,8 +66,10 @@ export default function Index() {
     }
     store.phase = 'playing';
     store.spawnTime = Date.now();
+    store.isBot = false;
     setMode(selectedMode);
     setPhase('playing');
+    void registerOnLeaderboard();
   }, [navigate]);
 
   const handleSpectate = useCallback(() => {
