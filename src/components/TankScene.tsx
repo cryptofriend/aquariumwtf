@@ -531,8 +531,12 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
     const handleBeforeUnload = () => {
       if (!store.dead && store.spawnTime > 0 && store.name) {
         const survivalSecs = Math.floor((Date.now() - store.spawnTime) / 1000);
+        // sendBeacon can't set custom headers, so the apikey MUST be in the
+        // URL query string. Without it PostgREST silently rejects with 401
+        // — which is why ~1000 sessions only produced 8 leaderboard rows.
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/leaderboard?apikey=${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`;
         navigator.sendBeacon(
-          `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/leaderboard`,
+          url,
           new Blob([JSON.stringify({
             player_name: store.name,
             survival_seconds: survivalSecs,
