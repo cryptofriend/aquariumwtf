@@ -160,6 +160,55 @@ Deno.serve(async (req) => {
         return json({ ok: true, bite_id: biteId, damage });
       }
 
+      // ─── EAT (consume a food orb) ───────────────────
+      case "eat": {
+        const { agent_id, name, color, food_id, x, y, z, weight, kills } = body;
+        if (!agent_id) return json({ ok: false, error: "agent_id required" }, 400);
+        if (!food_id) return json({ ok: false, error: "food_id required" }, 400);
+
+        const FOOD_WEIGHT_GAIN = 0.5;
+        const newWeight = Math.max(0.1, (Number(weight) || 1) + FOOD_WEIGHT_GAIN);
+
+        const channel = supabase.channel("aquarium-live");
+        await channel.subscribe();
+
+        // Remove the orb for everyone (host + other agents).
+        await channel.send({
+          type: "broadcast",
+          event: "food-eaten",
+          payload: { foodId: food_id },
+        });
+
+        // Broadcast updated state with the new weight.
+        await channel.send({
+          type: "broadcast",
+          event: "player-state",
+          payload: {
+            id: agent_id,
+            name: name || "Bot",
+            color: color || "#70a1ff",
+            x: Number(x) || 0, y: Number(y) || 0, z: Number(z) || 0,
+            weight: newWeight,
+            kills: Number(kills) || 0,
+            dead: false,
+          },
+        });
+        supabase.removeChannel(channel);
+
+        await supabase.from("leaderboard").update({
+          weight: newWeight,
+          kills: Number(kills) || 0,
+        }).eq("session_id", agent_id);
+
+        return json({
+          ok: true,
+          food_id,
+          weight_gained: FOOD_WEIGHT_GAIN,
+          new_weight: newWeight,
+          message: `Ate food orb ${food_id}. Weight is now ${newWeight.toFixed(2)}kg. Send this as your 'weight' in subsequent calls.`,
+        });
+      }
+
       // ─── STATUS (poll for incoming bites) ──────────
       case "status": {
         const { agent_id } = body;
