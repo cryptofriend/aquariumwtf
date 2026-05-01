@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import GameChat from './GameChat';
+import InviteAgentButton from './InviteAgentButton';
 import { supabase } from '@/integrations/supabase/client';
 import { getStore } from '../game/useGameStore';
 
