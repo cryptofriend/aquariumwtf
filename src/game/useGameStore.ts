@@ -21,6 +21,8 @@ export interface GameStore {
   spawnTime: number;
   immuneUntil: number;
   portalRef: string | null;
+  sessionId: string;
+  isBot: boolean;
 }
 
 function createGameStore(): GameStore {
@@ -47,6 +49,8 @@ function createGameStore(): GameStore {
     spawnTime: 0,
     immuneUntil: 0,
     portalRef: null,
+    sessionId: crypto.randomUUID(),
+    isBot: false,
   };
 }
 
