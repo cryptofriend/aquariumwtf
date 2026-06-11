@@ -4,6 +4,7 @@ import {
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountIdempotentInstruction,
   createTransferCheckedInstruction,
+  TOKEN_2022_PROGRAM_ID,
 } from '@solana/spl-token';
 import type { WalletContextState } from '@solana/wallet-adapter-react';
 import {
@@ -65,14 +66,17 @@ export async function buyTicketTx(wallet: WalletContextState): Promise<string> {
   const pool = new PublicKey(PRIZE_POOL);
   const buyer = wallet.publicKey;
 
-  const fromAta = getAssociatedTokenAddressSync(mint, buyer);
-  const toAta = getAssociatedTokenAddressSync(mint, pool);
+  // $MYTH is a Token-2022 mint (newer pump.fun launches) — every spl-token
+  // helper must be told so, or the ATAs and program id are wrong and the
+  // transfer fails on-chain.
+  const fromAta = getAssociatedTokenAddressSync(mint, buyer, false, TOKEN_2022_PROGRAM_ID);
+  const toAta = getAssociatedTokenAddressSync(mint, pool, false, TOKEN_2022_PROGRAM_ID);
   const rawAmount = BigInt(TICKET_PRICE_MYTH) * BigInt(10 ** MYTH_DECIMALS);
 
   const tx = new Transaction().add(
     // ensure the pool's token account exists (no-op if it already does)
-    createAssociatedTokenAccountIdempotentInstruction(buyer, toAta, pool, mint),
-    createTransferCheckedInstruction(fromAta, mint, toAta, buyer, rawAmount, MYTH_DECIMALS),
+    createAssociatedTokenAccountIdempotentInstruction(buyer, toAta, pool, mint, TOKEN_2022_PROGRAM_ID),
+    createTransferCheckedInstruction(fromAta, mint, toAta, buyer, rawAmount, MYTH_DECIMALS, [], TOKEN_2022_PROGRAM_ID),
   );
 
   // Fresh blockhash at send time — cached ones expire in wallet popups
