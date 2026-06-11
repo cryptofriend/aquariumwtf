@@ -40,7 +40,7 @@ export const AGENT_TIMEOUT_MS = 10_000;
 // the server. No ticket → spectator only. The winner takes the round pot
 // (credited as tickets; on-chain payout is the next milestone).
 export const ENTRY_COST_TOKENS = 1;   // charged per round entry AND per re-entry
-export const TICKET_PRICE_MYTH = 1;   // $MYTH per ticket ($MYTH has 6 decimals)
+export const TICKET_PRICE_MYTH = 21_000;   // $MYTH per ticket ($MYTH has 6 decimals)
 /** Share of every round pot that is burned; the rest goes to the winner. */
 export const POT_BURN_RATE = 0.2;
 /** Tickets burned from a pot (rounds down — small pots favor the winner). */

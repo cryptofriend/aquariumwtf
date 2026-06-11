@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { verifyDeposit, RpcFetch } from './deposits';
-import { MYTH_MINT, PRIZE_POOL_WALLET } from '../../shared/constants';
+import { MYTH_MINT, PRIZE_POOL_WALLET, TICKET_PRICE_MYTH, MYTH_DECIMALS } from '../../shared/constants';
 
 const NOW = 1_750_000_000_000;
 const BUYER = 'BuyerWa11et1111111111111111111111111111111';
+const TICKET_RAW = BigInt(TICKET_PRICE_MYTH) * BigInt(10 ** MYTH_DECIMALS);
 
 let sigCounter = 0;
 function freshSig() {
@@ -22,7 +23,7 @@ function fakeTx(opts: {
   missing?: boolean;
 }): RpcFetch {
   const {
-    amountRaw = 1_000_000n,
+    amountRaw = TICKET_RAW,
     to = PRIZE_POOL_WALLET,
     from = BUYER,
     err = null,
@@ -34,11 +35,11 @@ function fakeTx(opts: {
     meta: {
       err,
       preTokenBalances: [
-        { accountIndex: 1, mint: MYTH_MINT, owner: from, uiTokenAmount: { amount: String(10_000_000n) } },
+        { accountIndex: 1, mint: MYTH_MINT, owner: from, uiTokenAmount: { amount: String(TICKET_RAW * 10n) } },
         { accountIndex: 2, mint: MYTH_MINT, owner: to, uiTokenAmount: { amount: '0' } },
       ],
       postTokenBalances: [
-        { accountIndex: 1, mint: MYTH_MINT, owner: from, uiTokenAmount: { amount: String(10_000_000n - amountRaw) } },
+        { accountIndex: 1, mint: MYTH_MINT, owner: from, uiTokenAmount: { amount: String(TICKET_RAW * 10n - amountRaw) } },
         { accountIndex: 2, mint: MYTH_MINT, owner: to, uiTokenAmount: { amount: String(amountRaw) } },
       ],
     },
@@ -53,7 +54,7 @@ describe('on-chain ticket verification', () => {
   });
 
   it('credits multiple tickets for larger transfers', async () => {
-    const r = await verifyDeposit(freshSig(), fakeTx({ amountRaw: 3_500_000n }), NOW);
+    const r = await verifyDeposit(freshSig(), fakeTx({ amountRaw: TICKET_RAW * 7n / 2n }), NOW);
     expect(r).toEqual({ ok: true, wallet: BUYER, tickets: 3 }); // floor(3.5)
   });
 
@@ -66,7 +67,7 @@ describe('on-chain ticket verification', () => {
   });
 
   it('rejects transfers below the ticket price', async () => {
-    const r = await verifyDeposit(freshSig(), fakeTx({ amountRaw: 999_999n }), NOW);
+    const r = await verifyDeposit(freshSig(), fakeTx({ amountRaw: TICKET_RAW - 1n }), NOW);
     expect(r.ok).toBe(false);
   });
 

@@ -242,7 +242,7 @@ Key rules: bigger = slower; weight above 3kg slowly decays; final 60s is FRENZY 
           </>
         ) : (
           <p className="text-zinc-500 font-mono text-[11px] text-center">
-            Entry is <span className="text-amber-400 font-bold">1 $MYTH</span> — connect a wallet to buy your ticket.
+            Entry is <span className="text-amber-400 font-bold">{TICKET_PRICE_MYTH.toLocaleString()} $MYTH</span> — connect a wallet to buy your ticket.
             <br />
             No ticket? You can still watch the aquarium below. 👀
           </p>
@@ -290,7 +290,7 @@ Key rules: bigger = slower; weight above 3kg slowly decays; final 60s is FRENZY 
 
       <div className="mt-8 text-zinc-600 font-mono text-xs text-center space-y-1">
         <p>WASD / Arrows — swim &nbsp;·&nbsp; Q/E — up/down &nbsp;·&nbsp; Space — bite</p>
-        <p>1 $MYTH per entry · 5-minute rounds · winner takes 80% of the pot · 20% burned 🔥</p>
+        <p>{TICKET_PRICE_MYTH.toLocaleString()} $MYTH per entry · 5-minute rounds · winner takes 80% of the pot · 20% burned 🔥</p>
       </div>
 
       <button

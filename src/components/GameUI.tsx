@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { TANK_HALF, BITE_COOLDOWN_MS } from '../game/constants';
+import { TANK_HALF, BITE_COOLDOWN_MS, TICKET_PRICE_MYTH } from '../game/constants';
 import { biteRequest } from './TankScene';
 import { Move, ArrowUpDown, Bug, Info, X, Smartphone } from 'lucide-react';
 import { useIsMobile } from '../hooks/use-mobile';
@@ -7,6 +7,7 @@ import VirtualJoystick from './VirtualJoystick';
 import ChatLeaderboardPanel from './ChatLeaderboardPanel';
 import DeathScreen from './DeathScreen';
 import { net, self, phaseMsLeft, on, sendRespawn } from '../net/gameClient';
+import { fetchMythPriceUsd } from '../solana/myth';
 import type { Standing } from '../../shared/protocol';
 import { toast } from 'sonner';
 
@@ -85,6 +86,37 @@ function Minimap() {
   );
 }
 
+/** Big prize-pool readout: live pot in $MYTH and USD. */
+function PrizePoolBanner() {
+  const [price, setPrice] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => fetchMythPriceUsd().then((p) => { if (!cancelled) setPrice(p); });
+    load();
+    const id = setInterval(load, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  const myth = net.pot * TICKET_PRICE_MYTH;
+  const usd = price !== null ? myth * price : null;
+
+  return (
+    <div className="bg-black/75 backdrop-blur-sm border-2 border-amber-400/70 rounded-xl px-6 py-2 text-center shadow-lg shadow-amber-900/30 pointer-events-none">
+      <div className="text-amber-400/90 text-[10px] font-bold uppercase tracking-[0.2em]">🏆 Prize Pool</div>
+      <div className="text-amber-300 text-2xl font-bold leading-tight">
+        {myth.toLocaleString()} <span className="text-base">$MYTH</span>
+        {usd !== null && (
+          <span className="text-emerald-300 text-lg font-bold ml-2">
+            (${usd >= 100 ? Math.round(usd).toLocaleString() : usd.toFixed(2)})
+          </span>
+        )}
+      </div>
+      <div className="text-zinc-500 text-[9px]">winner takes 80% · 20% burned 🔥</div>
+    </div>
+  );
+}
+
 /** Top-center banner: lobby / countdown / round timer / frenzy warning. */
 function RoundBanner() {
   const msLeft = phaseMsLeft();
@@ -110,7 +142,7 @@ function RoundBanner() {
       const frenzy = msLeft < 60_000;
       content = (
         <span className={frenzy ? 'text-red-400 font-bold animate-pulse' : 'text-zinc-200'}>
-          {frenzy ? '🔥 FRENZY ' : '⏱ '}{fmtTime(msLeft)} · {net.alive} alive · <span className="text-amber-300">🏆 pot {net.pot}🪙</span>
+          {frenzy ? '🔥 FRENZY ' : '⏱ '}{fmtTime(msLeft)} · {net.alive} alive
         </span>
       );
       break;
@@ -121,10 +153,8 @@ function RoundBanner() {
   }
 
   return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none">
-      <div className="bg-black/70 backdrop-blur-sm border border-zinc-700 rounded-lg px-5 py-2 font-mono text-sm text-center">
-        {content}
-      </div>
+    <div className="bg-black/70 backdrop-blur-sm border border-zinc-700 rounded-lg px-5 py-2 font-mono text-sm text-center pointer-events-none">
+      {content}
     </div>
   );
 }
@@ -164,13 +194,13 @@ function ResultsOverlay({ standings, pot, burned }: { standings: Standing[]; pot
 /** Highlighted banner for watch-only spectators. */
 function SpectatorBanner({ onExit }: { onExit: () => void }) {
   return (
-    <div className="absolute top-16 left-1/2 -translate-x-1/2 pointer-events-auto">
+    <div className="absolute top-36 left-1/2 -translate-x-1/2 pointer-events-auto">
       <div className="bg-cyan-500/15 backdrop-blur-sm border-2 border-cyan-400 rounded-lg px-5 py-2 font-mono text-center shadow-lg shadow-cyan-900/40">
         <span className="text-cyan-300 text-xs font-bold uppercase tracking-wider">
           👀 Spectating the aquarium
         </span>
         <div className="text-zinc-300 text-[10px] mt-0.5">
-          Want in? <button onClick={onExit} className="underline text-amber-300 hover:text-amber-200">Buy a ticket (1 $MYTH) on the entry screen</button>
+          Want in? <button onClick={onExit} className="underline text-amber-300 hover:text-amber-200">Buy a ticket ({TICKET_PRICE_MYTH.toLocaleString()} $MYTH) on the entry screen</button>
         </div>
       </div>
     </div>
@@ -244,7 +274,10 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
 
   return (
     <div className="fixed inset-0 z-40 pointer-events-none font-mono">
-      <RoundBanner />
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5">
+        <PrizePoolBanner />
+        <RoundBanner />
+      </div>
       {spectateOnly && <SpectatorBanner onExit={onExit} />}
 
       {/* Live standings */}
@@ -353,7 +386,7 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
           <div className="mb-3 p-2 rounded-md bg-yellow-500/10 border border-yellow-500/30">
             <div className="text-yellow-300 text-[10px] font-bold uppercase tracking-wider mb-1">🎟 Tickets</div>
             <ul className="text-zinc-300 text-[11px] space-y-1 list-disc list-inside">
-              <li>1 ticket = <span className="text-yellow-300">1 $MYTH</span>, bought on the entry screen</li>
+              <li>1 ticket = <span className="text-yellow-300">{TICKET_PRICE_MYTH.toLocaleString()} $MYTH</span>, bought on the entry screen</li>
               <li>Entering a round costs <span className="text-yellow-300">1 ticket</span> — it goes into the pot</li>
               <li>Died? <span className="text-yellow-300">Re-enter for 1 ticket</span> — as many times as you can afford</li>
               <li>The winner takes <span className="text-amber-300 font-bold">80% of the pot</span> · <span className="text-orange-400 font-bold">20% is burned 🔥</span></li>

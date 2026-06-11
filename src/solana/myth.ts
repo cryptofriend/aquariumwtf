@@ -52,6 +52,22 @@ export async function fetchMythBalance(owner: string): Promise<number | null> {
   }
 }
 
+/** $MYTH/USD price via DexScreener (free, no key). Returns null on failure. */
+let priceCache: { value: number; at: number } | null = null;
+export async function fetchMythPriceUsd(): Promise<number | null> {
+  if (priceCache && Date.now() - priceCache.at < 60_000) return priceCache.value;
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${MYTH_MINT}`);
+    const json = await res.json();
+    const price = Number(json?.pairs?.[0]?.priceUsd);
+    if (!Number.isFinite(price) || price <= 0) return priceCache?.value ?? null;
+    priceCache = { value: price, at: Date.now() };
+    return price;
+  } catch {
+    return priceCache?.value ?? null;
+  }
+}
+
 /**
  * Buy a game ticket: transfer TICKET_PRICE_MYTH $MYTH to the prize pool.
  * The USER signs and sends via their wallet — we only assemble the

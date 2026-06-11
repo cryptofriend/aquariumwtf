@@ -55,7 +55,7 @@ export default function DeathScreen({ killerName, kills, weight, tokens, graceMs
       <p className="font-mono text-xs mt-3 text-zinc-500">
         {canRespawn
           ? `${tokens} ticket${tokens === 1 ? '' : 's'} left — every re-entry grows the pot`
-          : 'Out of tickets — buy more on the entry screen (1 $MYTH each) or win a pot'}
+          : 'Out of tickets — buy more on the entry screen or win a pot'}
       </p>
     </div>
   );
