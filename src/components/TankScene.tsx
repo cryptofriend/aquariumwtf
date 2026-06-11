@@ -1,83 +1,25 @@
-import { useRef, useMemo, useEffect, useCallback, useState } from 'react';
+/**
+ * Render-only scene. The server owns all game state — this component
+ * gathers input (keys / mouse / joystick / bite) and sends it up, then
+ * draws interpolated snapshots from src/net/gameClient.
+ */
+import { useRef, useMemo, useEffect, useReducer } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import * as THREE from 'three';
-import Portal from './Portal';
-import { getStore } from '../game/useGameStore';
-import { supabase } from '@/integrations/supabase/client';
-import {
-  TANK_HALF, DAMPING, MAX_SPEED, MOUSE_LERP, BITE_RANGE,
-  BITE_COOLDOWN_MS, BROADCAST_MS, FOOD_SPAWN_MS, REMOTE_LERP,
-  DEATH_DELAY_MS, uid, INITIAL_WEIGHT, FOOD_WEIGHT
-} from '../game/constants';
-import { FoodOrb, PlayerState } from '../game/types';
-import { addFoodIfMissing, createRandomFoodOrb, getSharedKelpPositions, removeFoodById, replaceFoods } from '../game/sharedWorld';
-import { updateLeaderboard, beaconUpdateLeaderboard } from '../game/leaderboardTracker';
+import { TANK_HALF, REMOTE_LERP, scaleFor, biteRangeFor } from '../game/constants';
+import { net, self, sendInput, RenderPlayer } from '../net/gameClient';
 import { joystickState } from './VirtualJoystick';
-import { toast } from 'sonner';
+import Scenery from './Scenery';
 
 const tmpVec = new THREE.Vector3();
 const PROXIMITY_RANGE = 10;
+
+/** Set by the space key or the UI bite button; consumed by the input loop. */
 export const biteRequest = { pending: false };
 
-/** Broadcast an activity event to the chat channel AND persist it
- *  so it survives page reloads — the aquarium log is permanent. */
-function broadcastActivity(text: string) {
-  const id = crypto.randomUUID();
-  const payload = {
-    id,
-    sender: 'system',
-    color: '#888',
-    text,
-    timestamp: Date.now(),
-    system: true,
-  };
-  // Live broadcast for current viewers
-  const ch = supabase.channel('aquarium-chat');
-  ch.subscribe((status) => {
-    if (status === 'SUBSCRIBED') {
-      ch.send({
-        type: 'broadcast',
-        event: 'activity',
-        payload,
-      }).then(() => supabase.removeChannel(ch));
-    }
-  });
-
-  // Persist to chat_messages so the activity log survives reloads.
-  supabase.from('chat_messages').insert({
-    id,
-    room: 'work',
-    sender: 'system',
-    color: '#888',
-    text,
-    system: true,
-  } as any).then(() => {});
-}
-
-interface EatingOrb {
-  id: string;
-  x: number; y: number; z: number;
-  startTime: number;
-  duration: number;
-}
-
-interface PlayerBroadcastState extends PlayerState {
-  id: string;
-}
-
-interface WorldSyncRequestPayload { requesterId: string }
-interface WorldSyncResponsePayload { targetId: string; foods: FoodOrb[] }
-interface FoodSpawnPayload { food: FoodOrb }
-interface FoodEatenPayload { foodId: string }
-
-// Scale: logarithmic so 1kg=small, 10kg=medium, 100kg=large
-function weightToScale(weight: number): number {
-  return 0.6 + Math.log2(Math.max(1, weight)) * 0.25;
-}
-
-function FishMesh({ color, opacity = 1, weight = INITIAL_WEIGHT }: { color: string; opacity?: number; weight?: number }) {
-  const scale = weightToScale(weight);
+function FishMesh({ color, opacity = 1, weight = 1 }: { color: string; opacity?: number; weight?: number }) {
+  const scale = scaleFor(weight);
   return (
     <group scale={[scale, scale, scale]}>
       <mesh scale={[1.2, 0.7, 0.6]}>
@@ -104,126 +46,20 @@ function FishMesh({ color, opacity = 1, weight = INITIAL_WEIGHT }: { color: stri
   );
 }
 
-function WeightBar({ weight }: { weight: number }) {
-  const pct = Math.min(1, weight / Math.max(weight, 10));
-  return (
-    <group position={[0, 1.8, 0]}>
-      <mesh>
-        <planeGeometry args={[2, 0.2]} />
-        <meshBasicMaterial color="#333" />
-      </mesh>
-      <mesh position={[(pct - 1), 0, 0.01]} scale={[pct, 1, 1]}>
-        <planeGeometry args={[2, 0.2]} />
-        <meshBasicMaterial color="#eab308" />
-      </mesh>
-    </group>
-  );
-}
-
-function Kelp({ position }: { position: [number, number, number] }) {
+/** Pulsing shield shown while a fish has spawn protection. */
+function ImmunityShield({ weight }: { weight: number }) {
   const ref = useRef<THREE.Mesh>(null!);
-  const offset = useMemo(() => Math.random() * Math.PI * 2, []);
-  const height = useMemo(() => 2 + Math.random() * 3, []);
-  const color = useMemo(() => {
-    const colors = ['#1a5c2a', '#0d4a22', '#2d7a3e', '#164c28'];
-    return colors[Math.floor(Math.random() * colors.length)];
-  }, []);
-
   useFrame(({ clock }) => {
-    if (ref.current) {
-      ref.current.rotation.x = Math.sin(clock.elapsedTime * 0.8 + offset) * 0.15;
-      ref.current.rotation.z = Math.sin(clock.elapsedTime * 0.6 + offset + 1) * 0.1;
-    }
-  });
-
-  return (
-    <mesh ref={ref} position={[position[0], -TANK_HALF.y + height / 2, position[2]]}>
-      <cylinderGeometry args={[0.15, 0.3, height, 6]} />
-      <meshStandardMaterial color={color} />
-    </mesh>
-  );
-}
-
-function Bubbles() {
-  const count = 40;
-  const ref = useRef<THREE.InstancedMesh>(null!);
-  const offsets = useMemo(() =>
-    Array.from({ length: count }, () => ({
-      x: (Math.random() - 0.5) * TANK_HALF.x * 1.8,
-      z: (Math.random() - 0.5) * TANK_HALF.z * 1.8,
-      speed: 0.5 + Math.random() * 1.5,
-      phase: Math.random() * TANK_HALF.y * 2,
-    })), []);
-  const dummy = useMemo(() => new THREE.Object3D(), []);
-
-  useFrame(({ clock }) => {
-    offsets.forEach((b, i) => {
-      const y = ((clock.elapsedTime * b.speed + b.phase) % (TANK_HALF.y * 2)) - TANK_HALF.y;
-      dummy.position.set(b.x, y, b.z);
-      dummy.scale.setScalar(0.05 + Math.random() * 0.08);
-      dummy.updateMatrix();
-      ref.current.setMatrixAt(i, dummy.matrix);
-    });
-    ref.current.instanceMatrix.needsUpdate = true;
-  });
-
-  return (
-    <instancedMesh ref={ref} args={[undefined, undefined, count]}>
-      <sphereGeometry args={[1, 6, 6]} />
-      <meshStandardMaterial color="#88ccff" transparent opacity={0.4} />
-    </instancedMesh>
-  );
-}
-
-function DistanceLabel({ targetPos, distance }: { targetPos: THREE.Vector3; distance: number }) {
-  const ref = useRef<THREE.Group>(null!);
-  const store = getStore();
-
-  useFrame(() => {
     if (!ref.current) return;
-    ref.current.position.lerpVectors(store.position, targetPos, 0.5);
-    ref.current.position.y += 1.5;
+    const pulse = 1 + Math.sin(clock.elapsedTime * 5) * 0.06;
+    const s = (scaleFor(weight) * 1.9) * pulse;
+    ref.current.scale.setScalar(s);
   });
-
-  const color = distance < BITE_RANGE ? '#ff4444' : distance < 5 ? '#ffaa00' : '#88ccff';
-
   return (
-    <group ref={ref}>
-      <Text fontSize={0.4} color={color} anchorX="center" anchorY="middle" font={undefined}>
-        {distance.toFixed(1)}m
-      </Text>
-    </group>
-  );
-}
-
-function EatingFoodOrb({ orb, onComplete }: { orb: EatingOrb; onComplete: () => void }) {
-  const ref = useRef<THREE.Group>(null!);
-  const completed = useRef(false);
-
-  useFrame(() => {
-    if (!ref.current || completed.current) return;
-    const store = getStore();
-    const elapsed = Date.now() - orb.startTime;
-    const progress = Math.min(elapsed / orb.duration, 1);
-    const ease = 1 - Math.pow(1 - progress, 3);
-    ref.current.scale.setScalar(1 - ease * 0.9);
-    tmpVec.set(orb.x, orb.y, orb.z);
-    ref.current.position.lerpVectors(tmpVec, store.position, ease);
-    ref.current.rotation.y += 0.3;
-    if (progress >= 1 && !completed.current) {
-      completed.current = true;
-      onComplete();
-    }
-  });
-
-  return (
-    <group ref={ref} position={[orb.x, orb.y, orb.z]}>
-      <pointLight color="#22ff44" intensity={3} distance={4} />
-      <mesh>
-        <sphereGeometry args={[0.4, 8, 8]} />
-        <meshStandardMaterial color="#44ff44" emissive="#22ff00" emissiveIntensity={1.2} />
-      </mesh>
-    </group>
+    <mesh ref={ref}>
+      <sphereGeometry args={[1, 16, 12]} />
+      <meshBasicMaterial color="#4ade80" transparent opacity={0.15} side={THREE.DoubleSide} />
+    </mesh>
   );
 }
 
@@ -231,21 +67,18 @@ function FoodOrbs() {
   const ref = useRef<THREE.Group>(null!);
 
   useFrame(({ clock }) => {
-    const store = getStore();
     if (!ref.current) return;
     ref.current.children.forEach((child, i) => {
-      const f = store.food[i];
+      const f = net.food[i];
       if (!f) return;
       child.position.set(f.x, f.y + Math.sin(clock.elapsedTime * 1.5 + i) * 0.5, f.z);
       child.rotation.y = clock.elapsedTime + i;
     });
   });
 
-  const store = getStore();
-
   return (
     <group ref={ref}>
-      {store.food.map((f) => (
+      {net.food.map((f) => (
         <group key={f.id} position={[f.x, f.y, f.z]}>
           <pointLight color="#ffdd00" intensity={2} distance={5} />
           <mesh>
@@ -258,129 +91,81 @@ function FoodOrbs() {
   );
 }
 
-export default function TankScene({ spectate }: { spectate?: boolean }) {
-  const { camera } = useThree();
-  const playerRef = useRef<THREE.Group>(null!);
-  const keys = useRef<Set<string>>(new Set());
-  const mouseWorld = useRef(new THREE.Vector3());
-  const lastBroadcast = useRef(0);
-  const lastFoodSpawn = useRef(0);
-  const channelRef = useRef<any>(null);
+function Fish({ player, isSelf }: { player: RenderPlayer; isSelf: boolean }) {
+  const ref = useRef<THREE.Group>(null!);
 
-  const deathTimeout = useRef<number | null>(null);
-  const [eatingOrbs, setEatingOrbs] = useState<EatingOrb[]>([]);
-  const [proximities, setProximities] = useState<{ id: string; pos: THREE.Vector3; dist: number }[]>([]);
-  const [, setSceneVersion] = useState(0);
-  const proximityRef = useRef<{ id: string; pos: THREE.Vector3; dist: number }[]>([]);
-  const lastProximityUpdate = useRef(0);
-  const isWorldHostRef = useRef(false);
-  const seenBitesRef = useRef<Map<string, number>>(new Map());
-
-  // Store callbacks in refs to avoid useEffect dependency churn
-  const callbacksRef = useRef({
-    bumpScene: () => {},
-    upsertRemote: (_id: string, _p: PlayerState) => {},
-    addFood: (_food: FoodOrb): boolean => false,
-    replaceFood: (_foods: FoodOrb[]) => {},
-    consumeFood: (_foodId: string): boolean => false,
-    broadcastState: () => {},
-    applyIncomingBite: (_payload: any, _requireTargetId?: boolean) => {},
+  useFrame(() => {
+    if (!ref.current) return;
+    // Advance interpolated position toward the latest server position
+    player.cx += (player.x - player.cx) * REMOTE_LERP;
+    player.cy += (player.y - player.cy) * REMOTE_LERP;
+    player.cz += (player.z - player.cz) * REMOTE_LERP;
+    ref.current.position.set(player.cx, player.cy, player.cz);
+    const target = tmpVec.set(player.x, player.y, player.z);
+    if (target.distanceTo(ref.current.position) > 0.15) ref.current.lookAt(target);
   });
 
-  const bumpScene = useCallback(() => setSceneVersion(v => v + 1), []);
+  const ghost = player.spectator;
+  const color = player.dead ? '#666666' : player.color;
+  const opacity = player.dead ? 0.45 : ghost ? 0.25 : 1;
 
-  const roundWeight = useCallback((value: number) => {
-    return Math.round(Math.max(0, value) * 100) / 100;
-  }, []);
+  return (
+    <group ref={ref} position={[player.cx, player.cy, player.cz]}>
+      <FishMesh color={color} opacity={opacity} weight={player.weight} />
+      {player.immune && !player.dead && !ghost && <ImmunityShield weight={player.weight} />}
+      <Text position={[0, 2.3, 0]} fontSize={0.5} color={player.dead ? '#666666' : isSelf ? '#ffe066' : '#ffffff'} anchorX="center" anchorY="middle" font={undefined}>
+        {`${player.name} (${player.weight.toFixed(1)}kg)${ghost ? ' 👻' : ''}`}
+      </Text>
+    </group>
+  );
+}
 
-  const rememberBite = useCallback((biteId: string) => {
-    const now = Date.now();
-    const seen = seenBitesRef.current;
-    seen.set(biteId, now);
+/** Distance readouts to nearby fish — red when in bite range. */
+function ProximityLabels() {
+  const groupRef = useRef<THREE.Group>(null!);
 
-    const cutoff = now - 15000;
-    for (const [id, timestamp] of seen) {
-      if (timestamp < cutoff) seen.delete(id);
+  useFrame(() => {
+    const me = self();
+    if (!groupRef.current || !me || me.dead || me.spectator) return;
+    let i = 0;
+    for (const p of net.players.values()) {
+      if (p.id === me.id || p.dead || p.spectator) continue;
+      const child = groupRef.current.children[i++] as THREE.Group | undefined;
+      if (!child) break;
+      const d = Math.sqrt((p.cx - me.cx) ** 2 + (p.cy - me.cy) ** 2 + (p.cz - me.cz) ** 2);
+      const visible = d < PROXIMITY_RANGE;
+      child.visible = visible;
+      if (visible) {
+        child.position.set((me.cx + p.cx) / 2, (me.cy + p.cy) / 2 + 1.5, (me.cz + p.cz) / 2);
+        const label = child.children[0] as unknown as { text?: string; color?: string } & THREE.Object3D;
+        const inRange = d < biteRangeFor(me.weight);
+        // drei <Text> exposes .text/.color on the underlying object
+        (label as any).text = `${d.toFixed(1)}m`;
+        (label as any).color = inRange ? '#ff4444' : d < 5 ? '#ffaa00' : '#88ccff';
+      }
     }
-  }, []);
-
-  const upsertRemote = useCallback((id: string, p: PlayerState) => {
-    getStore().remotePlayers.set(id, p);
-    bumpScene();
-  }, [bumpScene]);
-
-  const addFood = useCallback((food: FoodOrb) => {
-    const added = addFoodIfMissing(getStore().food, food);
-    if (added) bumpScene();
-    return added;
-  }, [bumpScene]);
-
-  const replaceFood = useCallback((foods: FoodOrb[]) => {
-    replaceFoods(getStore().food, foods);
-    bumpScene();
-  }, [bumpScene]);
-
-  const consumeFood = useCallback((foodId: string) => {
-    const removed = removeFoodById(getStore().food, foodId);
-    if (removed) bumpScene();
-    return removed;
-  }, [bumpScene]);
-
-  const broadcastState = useCallback(() => {
-    const store = getStore();
-    if (!channelRef.current) return;
-    void channelRef.current.send({
-      type: 'broadcast',
-      event: 'player-state',
-      payload: {
-        id: uid,
-        name: store.name,
-        color: store.color,
-        x: store.position.x,
-        y: store.position.y,
-        z: store.position.z,
-        weight: store.weight,
-        kills: store.kills,
-        dead: store.dead,
-      } satisfies PlayerBroadcastState,
-    });
-  }, []);
-
-  const applyIncomingBite = useCallback((payload: { biteId?: string; targetId?: string; attackerName?: string; damage?: number } | null | undefined, requireTargetId = false) => {
-    const store = getStore();
-    if (!payload?.biteId) return;
-    if (requireTargetId && payload.targetId !== uid) return;
-    if (seenBitesRef.current.has(payload.biteId) || store.dead) return;
-
-    rememberBite(payload.biteId);
-
-    const biteAmount = Math.max(0.1, Number(payload.damage) || 0.1);
-    store.weight = roundWeight(store.weight - biteAmount);
-    store.flashUntil = Date.now() + 300;
-    toast.error(`Bitten by ${payload.attackerName || 'Unknown'}! -${biteAmount.toFixed(1)}kg`);
-
-    if (store.weight <= 0 && !store.dead) {
-      store.dead = true;
-      store.killerName = payload.attackerName || 'Unknown';
-      // Update the leaderboard row that was inserted at spawn so the final
-      // weight/kills/survival are recorded for this session.
-      void updateLeaderboard();
-      deathTimeout.current = window.setTimeout(() => { store.phase = 'dead'; }, DEATH_DELAY_MS);
+    for (; i < groupRef.current.children.length; i++) {
+      groupRef.current.children[i].visible = false;
     }
+  });
 
-    broadcastState();
-  }, [broadcastState, rememberBite, roundWeight]);
+  const slots = useMemo(() => Array.from({ length: 8 }), []);
+  return (
+    <group ref={groupRef}>
+      {slots.map((_, i) => (
+        <group key={i} visible={false}>
+          <Text fontSize={0.4} color="#88ccff" anchorX="center" anchorY="middle" font={undefined}>0.0m</Text>
+        </group>
+      ))}
+    </group>
+  );
+}
 
-  // Keep callbacksRef in sync
-  callbacksRef.current.bumpScene = bumpScene;
-  callbacksRef.current.upsertRemote = upsertRemote;
-  callbacksRef.current.addFood = addFood;
-  callbacksRef.current.replaceFood = replaceFood;
-  callbacksRef.current.consumeFood = consumeFood;
-  callbacksRef.current.broadcastState = broadcastState;
-  callbacksRef.current.applyIncomingBite = applyIncomingBite;
-
-  const kelpPositions = useMemo<[number, number, number][]>(() => getSharedKelpPositions(), []);
+export default function TankScene() {
+  const { camera } = useThree();
+  const keys = useRef<Set<string>>(new Set());
+  const mouseWorld = useRef(new THREE.Vector3());
+  const mouseActive = useRef(false);
 
   // Keyboard
   useEffect(() => {
@@ -397,7 +182,7 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
   }, []);
 
-  // Mouse
+  // Mouse → point on the y=0 plane the fish is attracted to
   useEffect(() => {
     const onMove = (cx: number, cy: number) => {
       const ndc = new THREE.Vector2((cx / window.innerWidth) * 2 - 1, -(cy / window.innerHeight) * 2 + 1);
@@ -405,378 +190,72 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       raycaster.setFromCamera(ndc, camera);
       const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
       const target = new THREE.Vector3();
-      raycaster.ray.intersectPlane(plane, target);
-      if (target) mouseWorld.current.copy(target);
+      if (raycaster.ray.intersectPlane(plane, target)) {
+        mouseWorld.current.copy(target);
+        mouseActive.current = true;
+      }
     };
     const mh = (e: MouseEvent) => onMove(e.clientX, e.clientY);
-    const th = (e: TouchEvent) => { if (e.touches.length > 0) onMove(e.touches[0].clientX, e.touches[0].clientY); };
     window.addEventListener('mousemove', mh);
-    window.addEventListener('touchmove', th);
-    return () => { window.removeEventListener('mousemove', mh); window.removeEventListener('touchmove', th); };
+    return () => window.removeEventListener('mousemove', mh);
   }, [camera]);
 
-  // Realtime channels — empty deps so this runs exactly once
-  useEffect(() => {
-    const store = getStore();
-    const cbs = callbacksRef.current;
-    const channel = supabase.channel('aquarium-live', {
-      config: { presence: { key: uid }, broadcast: { self: true, ack: true } },
-    });
+  // Input → server, camera follow
+  useFrame(() => {
+    const me = self();
 
-    const resolveHost = () => {
-      const state = channel.presenceState();
-      const ids = Array.from(new Set([uid, ...Object.keys(state)])).sort();
-      isWorldHostRef.current = ids[0] === uid;
-    };
-
-    const parsePlayer = (p: any): PlayerState => ({
-      name: p.name || 'Unknown fish',
-      color: p.color || '#70a1ff',
-      x: p.x ?? 0,
-      y: p.y ?? 0,
-      z: p.z ?? 0,
-      weight: p.weight ?? INITIAL_WEIGHT,
-      kills: p.kills ?? 0,
-      dead: Boolean(p.dead),
-    });
-
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        const currentIds = new Set<string>();
-        Object.entries(state).forEach(([key, presences]) => {
-          if (key === uid) return;
-          currentIds.add(key);
-          const p = (presences as any[])?.[0];
-          if (p) store.remotePlayers.set(key, parsePlayer(p));
-        });
-        store.remotePlayers.forEach((_, key) => {
-          if (!currentIds.has(key)) store.remotePlayers.delete(key);
-        });
-        resolveHost();
-        callbacksRef.current.bumpScene();
-      })
-      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-        if (key === uid) return;
-        const p = (newPresences as any[])?.[0];
-        if (p) callbacksRef.current.upsertRemote(key, parsePlayer(p));
-        resolveHost();
-        toast(`🐟 ${p?.name || 'Unknown fish'} joined!`, { duration: 3000 });
-        // Only the elected world host persists activity to avoid N duplicates
-        // (one per connected client). The toast still fires locally for everyone.
-        if (isWorldHostRef.current) {
-          broadcastActivity(`🐟 ${p?.name || 'Unknown fish'} joined the aquarium`);
-        }
-      })
-      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-        const p = (leftPresences as any[])?.[0];
-        store.remotePlayers.delete(key);
-        resolveHost();
-        callbacksRef.current.bumpScene();
-        toast(`💨 ${p?.name || 'A fish'} left`, { duration: 3000 });
-        if (isWorldHostRef.current) {
-          broadcastActivity(`💨 ${p?.name || 'A fish'} left the aquarium`);
-        }
-      })
-      .on('broadcast', { event: 'player-state' }, ({ payload }) => {
-        const p = payload as PlayerBroadcastState;
-        if (!p || p.id === uid) return;
-        callbacksRef.current.upsertRemote(p.id, parsePlayer(p));
-      })
-      .on('broadcast', { event: 'world-sync-request' }, ({ payload }) => {
-        const req = payload as WorldSyncRequestPayload;
-        if (!req?.requesterId || req.requesterId === uid || !isWorldHostRef.current) return;
-        void channel.send({
-          type: 'broadcast',
-          event: 'world-sync-response',
-          payload: { targetId: req.requesterId, foods: getStore().food } satisfies WorldSyncResponsePayload,
-        });
-      })
-      .on('broadcast', { event: 'world-sync-response' }, ({ payload }) => {
-        const res = payload as WorldSyncResponsePayload;
-        if (res?.targetId !== uid || !Array.isArray(res.foods)) return;
-        callbacksRef.current.replaceFood(res.foods);
-      })
-      .on('broadcast', { event: 'food-spawned' }, ({ payload }) => {
-        const e = payload as FoodSpawnPayload;
-        if (e?.food) callbacksRef.current.addFood(e.food);
-      })
-      .on('broadcast', { event: 'food-eaten' }, ({ payload }) => {
-        const e = payload as FoodEatenPayload;
-        if (e?.foodId) callbacksRef.current.consumeFood(e.foodId);
-      })
-      .on('broadcast', { event: 'bite' }, ({ payload }) => {
-        console.log('[Aquarium] Bite event received:', JSON.stringify(payload), 'myUid:', uid);
-        callbacksRef.current.applyIncomingBite(payload as { biteId?: string; targetId?: string; attackerName?: string; damage?: number }, true);
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({
-            name: store.name,
-            color: store.color,
-            x: store.position.x,
-            y: store.position.y,
-            z: store.position.z,
-            weight: store.weight,
-            kills: store.kills,
-            dead: store.dead,
-          });
-          resolveHost();
-          callbacksRef.current.broadcastState();
-          void channel.send({
-            type: 'broadcast',
-            event: 'world-sync-request',
-            payload: { requesterId: uid } satisfies WorldSyncRequestPayload,
-          });
-        }
-      });
-
-    channelRef.current = channel;
-
-
-    // Per-player bite channel (redundant receiver for reliability)
-    const biteChannel = supabase.channel(`bites-${uid}`);
-    biteChannel
-      .on('broadcast', { event: 'bite' }, ({ payload }) => {
-        console.log('[Aquarium] Bite received on personal channel:', JSON.stringify(payload));
-        callbacksRef.current.applyIncomingBite(payload as { biteId?: string; targetId?: string; attackerName?: string; damage?: number });
-      })
-      .subscribe();
-
-    // Periodic update so the leaderboard reflects live progress (every 10s).
-    const lbInterval = window.setInterval(() => {
-      if (!store.dead) void updateLeaderboard();
-    }, 10000);
-
-    const handleBeforeUnload = () => {
-      // Updates the existing session row (created on join) — no more 401s.
-      beaconUpdateLeaderboard();
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      supabase.removeChannel(channel);
-      supabase.removeChannel(biteChannel);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      window.clearInterval(lbInterval);
-      if (deathTimeout.current) clearTimeout(deathTimeout.current);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Game loop
-  useFrame((_, delta) => {
-    const store = getStore();
-    const now = Date.now();
-
-    if (!spectate && !store.dead) {
-      const accel = new THREE.Vector3();
+    if (me && !me.dead && !me.spectator) {
+      const dir = new THREE.Vector3();
       const k = keys.current;
-      if (k.has('w') || k.has('arrowup')) accel.z -= 1;
-      if (k.has('s') || k.has('arrowdown')) accel.z += 1;
-      if (k.has('a') || k.has('arrowleft')) accel.x -= 1;
-      if (k.has('d') || k.has('arrowright')) accel.x += 1;
-      if (k.has('q')) accel.y += 1;
-      if (k.has('e')) accel.y -= 1;
+      if (k.has('w') || k.has('arrowup')) dir.z -= 1;
+      if (k.has('s') || k.has('arrowdown')) dir.z += 1;
+      if (k.has('a') || k.has('arrowleft')) dir.x -= 1;
+      if (k.has('d') || k.has('arrowright')) dir.x += 1;
+      if (k.has('q')) dir.y += 1;
+      if (k.has('e')) dir.y -= 1;
 
       if (Math.abs(joystickState.x) > 0.1 || Math.abs(joystickState.y) > 0.1) {
-        accel.x += joystickState.x;
-        accel.z += joystickState.y;
+        dir.x += joystickState.x;
+        dir.z += joystickState.y;
       }
-      if (joystickState.upDown !== 0) accel.y += joystickState.upDown;
+      if (joystickState.upDown !== 0) dir.y += joystickState.upDown;
 
-      if (accel.lengthSq() > 0) {
-        accel.normalize().multiplyScalar(0.8);
-        store.velocity.add(accel);
-      }
-
-      tmpVec.copy(mouseWorld.current).sub(store.position);
-      if (tmpVec.length() > 1) {
-        tmpVec.normalize().multiplyScalar(MOUSE_LERP * tmpVec.length());
-        store.velocity.add(tmpVec);
+      // No direct input → drift gently toward the mouse pointer
+      if (dir.lengthSq() < 0.01 && mouseActive.current) {
+        tmpVec.set(mouseWorld.current.x - me.cx, 0, mouseWorld.current.z - me.cz);
+        if (tmpVec.length() > 2) dir.copy(tmpVec.normalize().multiplyScalar(0.5));
       }
 
-      store.velocity.multiplyScalar(DAMPING);
-      if (store.velocity.length() > MAX_SPEED) store.velocity.normalize().multiplyScalar(MAX_SPEED);
-      store.position.add(tmpVec.copy(store.velocity).multiplyScalar(delta));
-      store.position.x = THREE.MathUtils.clamp(store.position.x, -TANK_HALF.x, TANK_HALF.x);
-      store.position.y = THREE.MathUtils.clamp(store.position.y, -TANK_HALF.y, TANK_HALF.y);
-      store.position.z = THREE.MathUtils.clamp(store.position.z, -TANK_HALF.z, TANK_HALF.z);
-
-      if (playerRef.current) {
-        playerRef.current.position.copy(store.position);
-        if (store.velocity.lengthSq() > 0.01) {
-          playerRef.current.lookAt(tmpVec.copy(store.position).add(store.velocity));
-        }
-      }
-
-      // Manual bite: space key or UI button
-      if (biteRequest.pending && now - store.lastBiteTime > BITE_COOLDOWN_MS) {
-        biteRequest.pending = false;
-        let nearest: { key: string; dist: number; name: string } | null = null;
-        store.remotePlayers.forEach((p, key) => {
-          if (p.dead) return;
-          const dist = store.position.distanceTo(tmpVec.set(p.x, p.y, p.z));
-          if (dist < BITE_RANGE && (!nearest || dist < nearest.dist)) {
-            nearest = { key, dist, name: p.name };
-          }
-        });
-        if (nearest) {
-          store.lastBiteTime = now;
-          const n = nearest as { key: string; dist: number; name: string };
-          const victim = store.remotePlayers.get(n.key);
-          const victimWeight = victim?.weight ?? 1;
-          const rawBite = Math.max(0.1, store.weight * 0.1);
-          const biteAmount = Math.min(rawBite, victimWeight);
-          const biteId = crypto.randomUUID();
-          const nextVictimWeight = roundWeight(victimWeight - biteAmount);
-
-          console.log('[Aquarium] Sending bite to targetId:', n.key, 'damage:', biteAmount, 'victimWeight:', victimWeight, 'biteId:', biteId);
-
-          if (victim) {
-            upsertRemote(n.key, {
-              ...victim,
-              weight: nextVictimWeight,
-              dead: victim.dead || nextVictimWeight <= 0,
-            });
-          }
-
-          const bitePayload = { biteId, targetId: n.key, attackerName: store.name, damage: biteAmount };
-
-          void channelRef.current?.send({
-            type: 'broadcast',
-            event: 'bite',
-            payload: bitePayload,
-          });
-
-          void supabase.channel(`bites-${n.key}`).send({
-            type: 'broadcast',
-            event: 'bite',
-            payload: bitePayload,
-          });
-
-          // Log bite to DB so headless agents can poll for damage
-          void supabase.from('agent_bites').insert({
-            target_agent_id: n.key,
-            attacker_name: store.name,
-            damage: biteAmount,
-          });
-
-          store.weight = roundWeight(store.weight + biteAmount);
-          store.maxWeight = Math.max(store.maxWeight, store.weight);
-          if (victim && !victim.dead && nextVictimWeight <= 0) {
-            store.kills++;
-            broadcastActivity(`💀 ${store.name} killed ${n.name}!`);
-          }
-          broadcastState();
-          broadcastActivity(`🦷 ${store.name} bit ${n.name} for ${biteAmount.toFixed(1)}kg`);
-          toast(`🦷 Bit ${n.name}! (+${biteAmount.toFixed(1)}kg)`);
-        } else {
-          toast('No fish in range!', { duration: 1000 });
-        }
-      } else if (biteRequest.pending) {
-        biteRequest.pending = false;
-      }
-
-      // Eat food: +1kg
-      for (let i = store.food.length - 1; i >= 0; i--) {
-        const f = store.food[i];
-        const dist = store.position.distanceTo(tmpVec.set(f.x, f.y, f.z));
-        if (dist < 2.2 && consumeFood(f.id)) {
-          setEatingOrbs(prev => [...prev, { id: f.id, x: f.x, y: f.y, z: f.z, startTime: Date.now(), duration: 400 }]);
-          store.weight = Math.round((store.weight + FOOD_WEIGHT) * 100) / 100;
-          store.maxWeight = Math.max(store.maxWeight, store.weight);
-          void channelRef.current?.send({
-            type: 'broadcast',
-            event: 'food-eaten',
-            payload: { foodId: f.id } satisfies FoodEatenPayload,
-          });
-          toast.success(`+${FOOD_WEIGHT}kg 🌿`);
-          broadcastActivity(`🌿 ${store.name} ate seaweed (+${FOOD_WEIGHT}kg)`);
-        }
-      }
-
-      // Proximity labels (throttled)
-      if (now - lastProximityUpdate.current > 150) {
-        lastProximityUpdate.current = now;
-        const nearby: { id: string; pos: THREE.Vector3; dist: number }[] = [];
-        store.remotePlayers.forEach((p, key) => {
-          if (p.dead) return;
-          const d = store.position.distanceTo(tmpVec.set(p.x, p.y, p.z));
-          if (d < PROXIMITY_RANGE) nearby.push({ id: `fish-${key}`, pos: new THREE.Vector3(p.x, p.y, p.z), dist: d });
-        });
-        store.food.forEach((f) => {
-          const d = store.position.distanceTo(tmpVec.set(f.x, f.y, f.z));
-          if (d < PROXIMITY_RANGE) nearby.push({ id: `food-${f.id}`, pos: new THREE.Vector3(f.x, f.y, f.z), dist: d });
-        });
-        if (JSON.stringify(nearby.map(n => n.id)) !== JSON.stringify(proximityRef.current.map(n => n.id))
-          || nearby.some((n, i) => Math.abs(n.dist - (proximityRef.current[i]?.dist ?? 0)) > 0.3)) {
-          proximityRef.current = nearby;
-          setProximities(nearby);
-        }
-      }
-
-      // Broadcast
-      if (now - lastBroadcast.current > BROADCAST_MS && channelRef.current) {
-        lastBroadcast.current = now;
-        broadcastState();
-      }
+      if (dir.lengthSq() > 1) dir.normalize();
+      const bite = biteRequest.pending;
+      biteRequest.pending = false;
+      sendInput(dir.x, dir.y, dir.z, bite);
+    } else {
+      biteRequest.pending = false;
     }
 
-    // Host spawns food
-    if (now - lastFoodSpawn.current > FOOD_SPAWN_MS && channelRef.current && isWorldHostRef.current) {
-      lastFoodSpawn.current = now;
-      const food = createRandomFoodOrb();
-      if (addFood(food)) {
-        void channelRef.current.send({
-          type: 'broadcast',
-          event: 'food-spawned',
-          payload: { food } satisfies FoodSpawnPayload,
-        });
-      }
-    }
-
-    // Camera follow
-    if (!spectate && playerRef.current) {
-      const store = getStore();
-      camera.position.lerp(tmpVec.copy(store.position).add(new THREE.Vector3(0, 8, 18)), 0.05);
-      camera.lookAt(store.position);
-    }
-
-    // Flash effect
-    const store2 = getStore();
-    if (store2.flashUntil > now && playerRef.current) {
-      playerRef.current.traverse(child => {
-        if ((child as THREE.Mesh).isMesh) {
-          const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial;
-          if (mat.emissive) mat.emissive.set('#ff0000');
-        }
-      });
-    } else if (playerRef.current) {
-      playerRef.current.traverse(child => {
-        if ((child as THREE.Mesh).isMesh) {
-          const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial;
-          if (mat.emissive) mat.emissive.set('#000000');
-        }
-      });
+    // Camera: follow own fish, or slow orbit when spectating
+    if (me && !me.spectator) {
+      camera.position.lerp(tmpVec.set(me.cx, me.cy + 8, me.cz + 18), 0.05);
+      camera.lookAt(me.cx, me.cy, me.cz);
+    } else {
+      const t = Date.now() / 20000;
+      camera.position.lerp(tmpVec.set(Math.sin(t) * 30, 10, Math.cos(t) * 30), 0.02);
+      camera.lookAt(0, 0, 0);
     }
   });
 
-  const store = getStore();
-
   return (
     <>
-      <ambientLight intensity={0.3} />
-      <directionalLight position={[10, 15, 10]} intensity={0.5} />
-      <pointLight position={[-TANK_HALF.x, 0, 0]} color="#ff4444" intensity={1.5} distance={50} />
-      <pointLight position={[TANK_HALF.x, 0, 0]} color="#4444ff" intensity={1.5} distance={50} />
-      <fog attach="fog" args={['#050510', 20, 80]} />
+      {/* Deep-water mood: cool ambient, warm sun shafts from above,
+          teal + violet accent lights at the far walls */}
+      <ambientLight intensity={0.42} color="#6f9fd8" />
+      <directionalLight position={[8, 20, 6]} intensity={0.7} color="#bfe3ff" />
+      <pointLight position={[-TANK_HALF.x, 2, 0]} color="#14b8a6" intensity={1.2} distance={45} />
+      <pointLight position={[TANK_HALF.x, 2, 0]} color="#8b5cf6" intensity={1.2} distance={45} />
+      <fog attach="fog" args={['#0a1a38', 26, 95]} />
 
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -TANK_HALF.y, 0]}>
-        <planeGeometry args={[TANK_HALF.x * 2, TANK_HALF.z * 2]} />
-        <meshStandardMaterial color="#0a0a15" />
-      </mesh>
-
+      {/* faint boundary walls so players can read the edge of the arena */}
       {[
         { pos: [0, 0, -TANK_HALF.z] as const, rot: [0, 0, 0] as const, size: [TANK_HALF.x * 2, TANK_HALF.y * 2] as const },
         { pos: [0, 0, TANK_HALF.z] as const, rot: [0, Math.PI, 0] as const, size: [TANK_HALF.x * 2, TANK_HALF.y * 2] as const },
@@ -785,74 +264,40 @@ export default function TankScene({ spectate }: { spectate?: boolean }) {
       ].map((wall, i) => (
         <mesh key={i} position={wall.pos as any} rotation={wall.rot as any}>
           <planeGeometry args={wall.size as any} />
-          <meshStandardMaterial color="#88aacc" transparent opacity={0.05} side={THREE.DoubleSide} />
+          <meshStandardMaterial color="#7ec8ff" transparent opacity={0.04} side={THREE.DoubleSide} />
         </mesh>
       ))}
 
-      {kelpPositions.map((pos, i) => <Kelp key={i} position={pos} />)}
-      <Bubbles />
+      <Scenery />
       <FoodOrbs />
-
-      {/* Vibe Jam Portal — exit portal */}
-      <Portal
-        position={[0, 0, 0]}
-        label="🌀 Vibe Jam Portal"
-        targetUrl="https://jam.pieter.com/portal/2026"
-        color="#8b5cf6"
-      />
-
-      {/* Return portal — only if player came from another game */}
-      {store.portalRef && (
-        <Portal
-          position={[0, 0, -TANK_HALF.z + 5]}
-          label="🔙 Return Portal"
-          targetUrl={store.portalRef}
-          color="#22d3ee"
-        />
-      )}
-
-      {!spectate && (
-        <group ref={playerRef} position={[store.position.x, store.position.y, store.position.z]}>
-          <FishMesh color={store.color} weight={store.weight} />
-          <WeightBar weight={store.weight} />
-          <Text position={[0, 2.3, 0]} fontSize={0.5} color="#ffffff" anchorX="center" anchorY="middle" font={undefined}>
-            {store.name} ({store.weight.toFixed(1)}kg)
-          </Text>
-        </group>
-      )}
-
-      {Array.from(store.remotePlayers.entries()).map(([key, p]) => (
-        <RemoteFish key={key} player={p} />
-      ))}
-
-      {!spectate && !store.dead && proximities.map((p) => (
-        <DistanceLabel key={p.id} targetPos={p.pos} distance={p.dist} />
-      ))}
-
-      {eatingOrbs.map((orb) => (
-        <EatingFoodOrb key={orb.id} orb={orb} onComplete={() => setEatingOrbs(prev => prev.filter(o => o.id !== orb.id))} />
-      ))}
+      <PlayersLayer />
+      <ProximityLabels />
     </>
   );
 }
 
-function RemoteFish({ player }: { player: PlayerState }) {
-  const ref = useRef<THREE.Group>(null!);
+/** Re-renders the fish list when players join/leave (snapshot-driven). */
+function PlayersLayer() {
+  // net.players is mutated in place; we only need React to re-render when
+  // the SET of ids changes. Poll cheaply — positions update via useFrame.
+  const idsRef = useRef('');
+  const [, force] = useReducer((v: number) => v + 1, 0);
+  const forceRef = useRef(force);
+  forceRef.current = force;
 
   useFrame(() => {
-    if (!ref.current) return;
-    const target = tmpVec.set(player.x, player.y, player.z);
-    ref.current.position.lerp(target, REMOTE_LERP);
-    if (target.distanceTo(ref.current.position) > 0.1) ref.current.lookAt(target);
+    const ids = [...net.players.keys()].join(',');
+    if (ids !== idsRef.current) {
+      idsRef.current = ids;
+      forceRef.current();
+    }
   });
 
   return (
-    <group ref={ref} position={[player.x, player.y, player.z]}>
-      <FishMesh color={player.dead ? '#666666' : player.color} opacity={player.dead ? 0.45 : 1} weight={player.weight} />
-      {!player.dead && <WeightBar weight={player.weight} />}
-      <Text position={[0, 2.3, 0]} fontSize={0.5} color={player.dead ? '#666666' : '#ffffff'} anchorX="center" anchorY="middle" font={undefined}>
-        {player.name} ({player.weight.toFixed(1)}kg)
-      </Text>
-    </group>
+    <>
+      {[...net.players.values()].map((p) => (
+        <Fish key={p.id} player={p} isSelf={p.id === net.selfId} />
+      ))}
+    </>
   );
 }

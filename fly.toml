@@ -1,0 +1,25 @@
+# Fly.io config for the Aquarium game server (WebSocket + agent API).
+app = "aquarium-wtf"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile.server"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # The tank must never sleep — rounds run as long as fish are connected.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "10s"
+  method = "GET"
+  path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

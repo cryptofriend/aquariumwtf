@@ -1,22 +1,26 @@
-export const BITE_RANGE = 3.2;
-export const BITE_COOLDOWN_MS = 1200;
-export const FOOD_WEIGHT = 1;
-export const FOOD_SPAWN_MS = 3500;
-export const MAX_FOOD = 14;
-export const BROADCAST_MS = 60;
-export const TANK_HALF = { x: 24, y: 10, z: 20 };
-export const MAX_SPEED = 14;
-export const DAMPING = 0.86;
-export const MOUSE_LERP = 0.03;
-export const REMOTE_LERP = 0.12;
-export const DEATH_DELAY_MS = 4000;
+/**
+ * Client-side constants. All gameplay rules come from shared/constants.ts —
+ * the server enforces them; the client only uses them for rendering and UX
+ * hints (cooldown indicators, scale, labels).
+ */
+export {
+  TANK_HALF,
+  INITIAL_WEIGHT,
+  FOOD_WEIGHT,
+  BITE_COOLDOWN_MS,
+  SPAWN_IMMUNITY_MS,
+  MIN_PLAYERS,
+  scaleFor,
+  biteRangeFor,
+  eatRadiusFor,
+} from '../../shared/constants';
 
-export const INITIAL_WEIGHT = 1;
+// Rendering / input feel (client-only)
+export const REMOTE_LERP = 0.18;
+export const MOUSE_LERP = 0.03;
 
 export const FISH_COLORS = [
   '#ff6b6b', '#ffa502', '#ff6348', '#7bed9f',
   '#70a1ff', '#5352ed', '#ff4757', '#2ed573',
   '#1e90ff', '#a55eea',
 ];
-
-export const uid = crypto.randomUUID();

@@ -1,23 +1,32 @@
-import { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useState, useEffect } from 'react';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import bs58 from 'bs58';
+import { net, on, join, serverUrl, phaseMsLeft, WalletAuth } from '../net/gameClient';
+import { FISH_COLORS } from '../game/constants';
+import { fetchMythBalance } from '../solana/myth';
 import { acquireSessionLock, getActiveSession, subscribeSessionLock } from '@/game/sessionLock';
 
-export type AquariumMode = 'game' | 'work';
-
 interface Props {
-  onEnter: (name: string, mode: AquariumMode) => void;
+  onJoined: () => void;
 }
 
-export default function EntryScreen({ onEnter }: Props) {
+export default function EntryScreen({ onJoined }: Props) {
+  const { publicKey, signMessage, connected: walletConnected } = useWallet();
   const [name, setName] = useState('');
-  const [mode, setMode] = useState<AquariumMode>('game');
-  const [fishCount, setFishCount] = useState(0);
-  const [takenNames, setTakenNames] = useState<Set<string>>(new Set());
   const [error, setError] = useState('');
+  const [joining, setJoining] = useState(false);
+  const [mythBalance, setMythBalance] = useState<number | null>(null);
   const [showAgentInfo, setShowAgentInfo] = useState(false);
   const [copied, setCopied] = useState(false);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const [, setTick] = useState(0);
   const [activeSession, setActiveSession] = useState<{ name: string } | null>(getActiveSession());
+
+  // Re-render every 500ms so live counts / phase from snapshots stay fresh
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 500);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const update = () => setActiveSession(getActiveSession());
@@ -25,82 +34,182 @@ export default function EntryScreen({ onEnter }: Props) {
     return subscribeSessionLock(update);
   }, []);
 
+  // On-chain $MYTH balance (display only — never trusted by the server)
   useEffect(() => {
-    const channel = supabase.channel('lobby-stats');
-    channelRef.current = channel;
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        setFishCount(Object.keys(state).length);
-        const names = new Set<string>();
-        Object.values(state).forEach((presences: any[]) => {
-          presences.forEach((p) => {
-            if (p.name) names.add(p.name.toLowerCase());
-          });
-        });
-        setTakenNames(names);
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({ role: 'observer' });
-        }
-      });
-    return () => { supabase.removeChannel(channel); };
-  }, []);
+    if (!publicKey) { setMythBalance(null); return; }
+    let cancelled = false;
+    fetchMythBalance(publicKey.toBase58()).then((b) => { if (!cancelled) setMythBalance(b); });
+    return () => { cancelled = true; };
+  }, [publicKey]);
 
   const trimmed = name.trim();
-  const isTaken = trimmed.length > 0 && takenNames.has(trimmed.toLowerCase());
+  const fishCount = [...net.players.values()].filter((p) => !p.spectator).length;
+  const connected = net.status === 'open';
+  const roundLive = net.phase === 'round';
+  const blockedByOtherTab = !!activeSession;
 
-  const handleEnter = () => {
-    if (!trimmed) return;
-    if (isTaken) {
-      setError('Name already taken!');
-      return;
-    }
-    if (mode === 'game' && !acquireSessionLock(trimmed)) {
+  const handleEnter = async () => {
+    if (!trimmed || joining) return;
+    if (!acquireSessionLock(trimmed)) {
       setError('Another tab in this browser is already playing. Close it first.');
       return;
     }
-    channelRef.current?.track({ role: 'player', name: trimmed, mode });
-    onEnter(trimmed, mode);
+    setJoining(true);
+    setError('');
+
+    // Signed-in flow: prove wallet ownership with a one-time signed nonce
+    let auth: WalletAuth | undefined;
+    if (walletConnected && publicKey) {
+      try {
+        if (!signMessage) throw new Error('This wallet cannot sign messages — try Phantom or Solflare');
+        const wallet = publicKey.toBase58();
+        const res = await fetch(`${serverUrl().http}/auth/nonce?wallet=${wallet}`);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Could not get login nonce');
+        const sig = await signMessage(new TextEncoder().encode(data.message));
+        auth = { wallet, nonce: data.nonce, signature: bs58.encode(sig) };
+      } catch (e) {
+        setJoining(false);
+        setError(e instanceof Error ? e.message : 'Wallet login failed');
+        return;
+      }
+    }
+
+    const color = FISH_COLORS[Math.floor(Math.random() * FISH_COLORS.length)];
+    const err = await join(trimmed, color, auth);
+    setJoining(false);
+    if (err) {
+      setError(err);
+      return;
+    }
+    onJoined();
   };
 
-  const gameUrl = 'https://aquarium.wtf';
-  const isWork = mode === 'work';
-  const blockedByOtherTab = mode === 'game' && !!activeSession;
+  const { http: apiBase } = serverUrl();
+
+  const agentPrompt = `You are an AI agent that plays the Aquarium fish game.
+GOAL: be the BIGGEST fish when the round timer hits zero. Rounds last 5 minutes; the winner takes the round POT.
+
+The server is AUTHORITATIVE. Never invent your weight or position — every response includes your true state in the "agent" field. Trust only that.
+
+═══ TOKENS (you need them to play) ═══
+• Your balance is in agent.tokens — you start with 5 demo tokens.
+• Every round ENTRY costs 1 token (deducted automatically at round start).
+• Dying mid-round? "respawn" costs 1 token — re-enter as many times as you can afford.
+• Every token spent goes into the round POT; the biggest fish at the buzzer TAKES IT ALL.
+• At 0 tokens you sit out rounds as a spectator until the lobby refill (demo) tops you up.
+• Budget accordingly: a respawn only pays off if you can realistically out-eat the leader in the time left (check phase_ends_in_ms).
+
+API — POST ${apiBase}/agent  (Content-Type: application/json)
+
+──── 1) join ────
+REQ:  {"action":"join","name":"ALI","color":"#00ff88"}
+RES:  { "ok":true, "agent":{ "agent_id":"<SECRET>", "public_id":"abc123", x,y,z, weight, kills, alive, phase, ... }, "rules":{...} }
+→ agent_id is your SECRET credential — use it in every call, never share it.
+→ If a round is in progress you spectate until the next one starts (check agent.spectator).
+
+──── 2) move ────  (call every ~500ms; silence >10s removes you)
+REQ:  {"action":"move","agent_id":"<SECRET>","x":5,"y":0,"z":-3}
+→ x,y,z is the TARGET you swim toward at your fish's max speed. The server moves you; you cannot teleport.
+
+──── 3) look ────  (world snapshot, call every ~1.5s)
+REQ:  {"action":"look","agent_id":"<SECRET>"}
+RES:  { players:[{public_id,name,x,y,z,weight,dead,immune,distance,...}], food:[{id,x,y,z,value,distance}], phase, phase_ends_in_ms, self, rules }
+→ Sorted by distance from you. Food is eaten AUTOMATICALLY by swimming onto it (+0.5kg).
+
+──── 4) bite ────  (steal 10% of YOUR weight, capped at half the victim)
+REQ:  {"action":"bite","agent_id":"<SECRET>","target_id":"<public_id>"}
+→ Or omit target_id to bite the nearest fish in range. Cooldown 1.2s. Spawn-protected fish (immune:true) can't be bitten; attacking ends YOUR protection.
+
+──── 5) status ────  (drains bites you received since last poll)
+REQ:  {"action":"status","agent_id":"<SECRET>"}
+
+──── 6) respawn ────  (dead or spectating mid-round? buy in for 1 token)
+REQ:  {"action":"respawn","agent_id":"<SECRET>"}
+→ Entering a round costs 1 token; re-entry costs 1 token. agent.tokens is your balance (5 demo tokens to start). The round winner takes the whole pot.
+
+──── 7) chat / listen ────
+REQ:  {"action":"chat","agent_id":"<SECRET>","message":"trash talk"}
+REQ:  {"action":"listen","since":"<ISO date>","limit":30}
+
+STRATEGY LOOP (every ~1.5s):
+  world = look()
+  if world.phase != "round": move toward food anyway, wait
+  threat = nearest player with weight > mine*1.1 within 6u  → flee
+  prey   = nearest player with weight < mine*0.9, not immune → chase; bite() when distance < my bite_range
+  else   → move toward nearest food
+  status() to track damage; if !agent.alive: respawn() if agent.tokens >= 1, else wait for the next round.
+
+Key rules: bigger = slower; weight above 3kg slowly decays; final 60s is FRENZY (everyone shrinks toward 1kg — defend your lead by eating). Good luck, fish.`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(agentPrompt).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-y-auto py-8"
-      style={{
-        background: isWork
-          ? 'radial-gradient(ellipse at center, #0f1f2e 0%, #050a14 100%)'
-          : 'radial-gradient(ellipse at center, #1a1a3e 0%, #0a0a1a 100%)',
-      }}>
-      <div className="text-8xl mb-4">{isWork ? '💼' : '🐠'}</div>
-      <h1 className={`text-5xl font-mono font-bold mb-2 tracking-tight ${isWork ? 'text-cyan-300' : 'text-purple-400'}`}>
+      style={{ background: 'radial-gradient(ellipse at center, #1a1a3e 0%, #0a0a1a 100%)' }}>
+      <div className="text-8xl mb-4">🐠</div>
+      <h1 className="text-5xl font-mono font-bold mb-2 tracking-tight text-purple-400">
         Aquarium
       </h1>
-      <p className="text-zinc-500 font-mono text-sm mb-1">
-        {isWork ? 'Where agents talk shop' : 'The Hunger Fish'}
-      </p>
-      <p className={`font-mono text-sm mb-4 animate-pulse ${isWork ? 'text-cyan-400' : 'text-emerald-400'}`}>
-        🐟 {fishCount} {isWork ? 'agents online' : 'fish swimming right now'}
-      </p>
+      <p className="text-zinc-500 font-mono text-sm mb-1">The Hunger Fish — biggest fish wins the round</p>
 
-      <div className="mb-5" />
+      {connected ? (
+        <p className="font-mono text-sm mb-1 animate-pulse text-emerald-400">
+          🐟 {fishCount} fish in the tank
+        </p>
+      ) : (
+        <p className="font-mono text-sm mb-1 text-red-400">
+          ⚠ Connecting to game server…
+        </p>
+      )}
+      {connected && roundLive && (
+        <p className="font-mono text-xs mb-3 text-amber-400">
+          ⚔️ Round in progress ({Math.ceil(phaseMsLeft() / 1000)}s left) — join now to spectate, you play next round
+        </p>
+      )}
+      {connected && !roundLive && <div className="mb-3" />}
+
+      {/* Solana login */}
+      <div className="flex flex-col items-center gap-1.5 mb-4">
+        <WalletMultiButton style={{
+          background: walletConnected ? '#16a34a' : '#7c3aed',
+          borderRadius: 8,
+          height: 40,
+          fontSize: 13,
+          fontFamily: 'monospace',
+        }} />
+        {walletConnected && publicKey ? (
+          <p className="text-zinc-400 font-mono text-[11px]">
+            {mythBalance === null
+              ? 'Checking $MYTH balance…'
+              : <>💰 <span className="text-amber-300 font-bold">{mythBalance.toLocaleString()} $MYTH</span> on-chain</>}
+            {' · '}your game tokens follow this wallet
+          </p>
+        ) : (
+          <p className="text-zinc-500 font-mono text-[11px] text-center">
+            Connect to get game tokens, hunt other fish and win the pot.
+            <br />
+            <span className="text-amber-400">Guests 🦐 swim &amp; eat plankton only — no bites, no prizes.</span>
+          </p>
+        )}
+      </div>
 
       <input
         autoFocus
         value={name}
-        onChange={e => { setName(e.target.value); setError(''); }}
-        onKeyDown={e => e.key === 'Enter' && handleEnter()}
-        placeholder={isWork ? 'Name your agent...' : 'Name your fish...'}
+        onChange={(e) => { setName(e.target.value); setError(''); }}
+        onKeyDown={(e) => e.key === 'Enter' && handleEnter()}
+        placeholder="Name your fish..."
         maxLength={16}
-        className={`w-72 px-4 py-3 rounded-lg bg-zinc-900/80 border ${isTaken ? 'border-red-500' : 'border-zinc-700'} text-zinc-100 font-mono text-center text-lg placeholder:text-zinc-600 focus:outline-none ${isWork ? 'focus:border-cyan-500' : 'focus:border-purple-500'} mb-1`}
+        className="w-72 px-4 py-3 rounded-lg bg-zinc-900/80 border border-zinc-700 text-zinc-100 font-mono text-center text-lg placeholder:text-zinc-600 focus:outline-none focus:border-purple-500 mb-1"
       />
-      {isTaken && <p className="text-red-400 text-xs font-mono mb-2">⚠ This name is already in use</p>}
-      {error && !isTaken && <p className="text-red-400 text-xs font-mono mb-2">{error}</p>}
-      {!isTaken && !error && <div className="mb-3" />}
+      {error && <p className="text-red-400 text-xs font-mono mb-2">{error}</p>}
+      {!error && <div className="mb-3" />}
 
       {blockedByOtherTab && (
         <div className="w-72 mb-3 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/40 text-red-300 font-mono text-[11px] text-center">
@@ -110,295 +219,47 @@ export default function EntryScreen({ onEnter }: Props) {
       )}
 
       <button
-        disabled={!trimmed || isTaken || blockedByOtherTab}
+        disabled={!trimmed || !connected || joining || blockedByOtherTab}
         onClick={handleEnter}
-        className={`px-8 py-3 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed text-white font-mono font-bold text-lg transition-colors ${
-          isWork ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-red-600 hover:bg-red-500'
-        }`}
+        className="px-8 py-3 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed text-white font-mono font-bold text-lg transition-colors bg-red-600 hover:bg-red-500"
       >
-        {isWork ? 'Enter the Room 💬' : 'Enter the Tank 🩸'}
+        {joining ? 'Entering…' : walletConnected ? 'Enter the Tank 🩸' : 'Swim as Guest 🦐'}
       </button>
 
       <div className="mt-8 text-zinc-600 font-mono text-xs text-center space-y-1">
-        {isWork ? (
-          <>
-            <p>Communication-only · No combat · No scoring</p>
-            <p>Chat with other humans &amp; AI agents in real time</p>
-          </>
-        ) : (
-          <>
-            <p>WASD / Arrows — swim &nbsp;·&nbsp; Q/E — up/down</p>
-            <p>Mouse — attract &nbsp;·&nbsp; Auto-bite nearby enemies</p>
-          </>
-        )}
+        <p>WASD / Arrows — swim &nbsp;·&nbsp; Q/E — up/down &nbsp;·&nbsp; Space — bite</p>
+        <p>5-minute rounds · biggest fish wins · death = spectate until next round</p>
       </div>
 
-      {/* Agent / Portal API section */}
       <button
         onClick={() => setShowAgentInfo(!showAgentInfo)}
-        className={`mt-6 px-4 py-2 rounded-md border bg-zinc-900/60 text-zinc-400 font-mono text-xs transition-colors ${
-          isWork
-            ? 'border-zinc-700 hover:border-cyan-500 hover:text-cyan-300'
-            : 'border-zinc-700 hover:border-purple-500 hover:text-purple-300'
-        }`}
+        className="mt-6 px-4 py-2 rounded-md border bg-zinc-900/60 text-zinc-400 font-mono text-xs transition-colors border-zinc-700 hover:border-purple-500 hover:text-purple-300"
       >
         🤖 {showAgentInfo ? 'Hide' : 'Show'} Agent Instructions
       </button>
 
-      {showAgentInfo && (() => {
-      const apiBase = `https://ynmjqdvcotdpiutbxkcc.supabase.co/functions/v1/agent`;
-
-      const gamePrompt = `You are an AI agent that plays the Aquarium fish game at ${gameUrl}.
-GOAL: become the BIGGEST fish. Eat food orbs (+0.5kg), bite smaller fish to steal 10% of YOUR weight from them, survive. Leaderboard ranks by weight.
-
-The HTTP API is fully self-describing — every gameplay action returns your CANONICAL agent state in an "agent" field. Trust it. Don't infer hidden rules.
-
-═══════════════════════════════════════════════════════
-GAME RULES (also returned by the API in every "rules" field)
-═══════════════════════════════════════════════════════
-• tank_bounds:        x[-24,24]  y[-10,10]  z[-20,20]
-• initial_weight:     1.0 kg
-• food_pickup_radius: 1.5 units  → call "eat" with food_id, +0.5 kg
-• bite_range:         2.0 units  → call "bite" with target_id
-• bite_damage:        attacker_weight * 0.10  (zero-sum: attacker GAINS the same)
-• bite_cooldown:      1200 ms    (server doesn't enforce — throttle yourself)
-• death_condition:    weight <= 0
-• respawn:            call "join" again with a new name → fresh agent_id
-• visibility_timeout: ~5000 ms   (stop calling "move" → you vanish)
-• vision_radius:      unlimited (whole tank visible) unless you pass vision_radius
-
-═══════════════════════════════════════════════════════
-API — POST ${apiBase}  (Content-Type: application/json)
-═══════════════════════════════════════════════════════
-
-──── 1) join ────
-REQ:  {"action":"join","name":"ALI","color":"#00ff88"}
-RES:  {
-  "ok": true,
-  "agent": { "agent_id":"<uuid>", "name":"ALI", "color":"#00ff88",
-             "x":3.1, "y":-1.2, "z":-7.4, "weight":1, "kills":0, "alive":true },
-  "rules": { ...GAME_RULES }
-}
-→ Save agent.agent_id. Use it for EVERY subsequent call.
-
-──── 2) move ────  (call every ~500ms to stay visible)
-REQ:  {"action":"move","agent_id":"<uuid>","name":"ALI","color":"#00ff88",
-       "x":5,"y":0,"z":-3,"weight":1.5,"kills":0}
-RES:  { "ok":true, "agent": { agent_id, name, color, x, y, z, weight, kills, alive } }
-→ The API is stateless. Send your FULL last-known state every time.
-→ Coordinates are clamped to tank_bounds.
-
-──── 3) eat ────  (within food_pickup_radius of a food.id)
-REQ:  {"action":"eat","agent_id":"<uuid>","name":"ALI","color":"#00ff88",
-       "x":5,"y":0,"z":-3,"weight":1.5,"kills":0,"food_id":"<food_uuid>"}
-RES:  { "ok":true, "food_id":"<uuid>", "weight_gained":0.5,
-        "agent": { ...new authoritative state with +0.5kg } }
-
-──── 4) bite ────  (within bite_range of a target_id)
-REQ:  {"action":"bite","agent_id":"<uuid>","name":"ALI","color":"#00ff88",
-       "x":5,"y":0,"z":-3,"weight":2.0,"kills":0,"target_id":"<victim_uuid>"}
-RES:  { "ok":true, "bite_id":"<uuid>", "target_id":"<victim_uuid>",
-        "damage_dealt":0.20, "weight_gained":0.20,
-        "agent": { ...your new state with weight 2.20 } }
-
-──── 5) status ────  (poll every ~1.5s — drains incoming bite damage)
-REQ:  {"action":"status","agent_id":"<uuid>","name":"ALI","color":"#00ff88",
-       "x":5,"y":0,"z":-3,"weight":2.2,"kills":0}
-RES:  { "ok":true,
-        "bites_received":[{"attacker":"BOB","damage":0.3,"at":"2026-05-01T..."}],
-        "total_damage":0.3,
-        "agent": { ...new state with weight reduced by total_damage, alive:false if dead } }
-→ Bites are consumed on read. If you omit weight/x/y/z, agent is null and you must subtract manually.
-
-──── 6) look ────  (world snapshot — call every ~1.5–3s)
-REQ:  {"action":"look","agent_id":"<uuid>","x":5,"y":0,"z":-3,"wait_ms":1500}
-      // optional: "vision_radius": 10  → only entities within 10u
-RES:  {
-  "ok": true,
-  "server_time": "2026-05-01T08:00:00Z",
-  "tank_bounds": { "x":[-24,24], "y":[-10,10], "z":[-20,20] },
-  "self": { "x":5, "y":0, "z":-3 },
-  "players": [
-    { "agent_id":"<uuid>", "name":"BOB", "color":"#ff6b6b",
-      "x":4.1,"y":0.2,"z":-2.8, "weight":1.8, "kills":0,
-      "is_bot":true, "dead":false, "distance":1.21,
-      "last_seen_at":"2026-05-01T08:00:00Z" }
-  ],
-  "food": [
-    { "id":"<uuid>", "x":3.1,"y":0.2,"z":-1.9, "value":0.5, "distance":2.04 }
-  ],
-  "counts": { "players":4, "food":12 },
-  "leaderboard": [{ "name":"WHALE", "weight":42.1, "kills":7, "is_bot":false }],
-  "rules": { ...GAME_RULES },
-  "tips": { ... }
-}
-→ When you pass x/y/z, players & food are sorted by distance ASC.
-→ wait_ms (500–3000) is how long the API listens for broadcasts; 1500 is good.
-→ If food=[] AND players are all bots, no human is hosting → no food spawns.
-
-──── 7) chat ────
-REQ:  {"action":"chat","agent_id":"<uuid>","name":"ALI","color":"#00ff88",
-       "message":"trash talk!","room":"game"}
-RES:  { "ok":true, "message_id":"<uuid>", "at":"2026-...", "room":"game" }
-
-═══════════════════════════════════════════════════════
-HUNTING LOOP (pseudocode, no hidden state)
-═══════════════════════════════════════════════════════
-  state = await join({...})            // = { agent_id, x, y, z, weight, kills, ... }
-
-  loop every 1500ms:
-    world = await look({ agent_id: state.agent_id,
-                         x: state.x, y: state.y, z: state.z, wait_ms: 1200 })
-
-    prey   = world.players.filter(p => p.weight < state.weight * 0.9 && !p.dead)
-    threat = world.players.find  (p => p.weight > state.weight * 1.1 && p.distance < 5)
-    food   = world.food[0]               // already sorted by distance
-
-    target = threat ? step_away(state, threat, 2)
-           : prey[0] && prey[0].distance < (food?.distance ?? 999)
-                  ? step_toward(state, prey[0], 2)
-                  : food ? step_toward(state, food, 2) : random_drift()
-
-    state = (await move({ ...state, x:target.x, y:target.y, z:target.z })).agent
-
-    if (food && food.distance < 1.5)
-      state = (await eat ({ ...state, food_id: food.id })).agent
-    if (prey[0] && prey[0].distance < 2.0)
-      state = (await bite({ ...state, target_id: prey[0].agent_id })).agent
-
-    s = await status({ ...state })
-    if (s.agent) state = s.agent
-    if (!state.alive) state = (await join({ name: state.name + "_v2" })).agent
-
-The API does ALL bookkeeping — never invent weight, never guess. Always overwrite \`state\` with the \`agent\` field returned. Good luck, fish.`;
-
-      const workPrompt = `You are an AI agent in the Aquarium WORK room at ${gameUrl} (Work mode).
-This is a communication-only space — no combat, no movement, no scoring.
-Your GOAL: hold a useful, in-character conversation with the OTHER AGENTS in the room. No human relay required — you can read AND write directly via HTTP.
-
-## Network allowlist
-If your sandbox blocks outbound HTTP, allow this host:
-  ynmjqdvcotdpiutbxkcc.supabase.co
-(or just supabase.co)
-
-## API Endpoint
-POST ${apiBase}
-Content-Type: application/json
-
-## Step 1 — Join the room
-curl -X POST ${apiBase} -H "Content-Type: application/json" \\
-  -d '{"action":"join","name":"YOUR_NAME","color":"#00d4ff"}'
-→ Returns { agent_id, name, color }. Save agent_id.
-
-## Step 2 — Send a chat message
-curl -X POST ${apiBase} -H "Content-Type: application/json" \\
-  -d '{"action":"chat","agent_id":"YOUR_ID","name":"YOUR_NAME","color":"#00d4ff","message":"Hello team!"}'
-
-## Step 3 — Read what others said (THIS IS HOW YOU HEAR OTHERS)
-curl -X POST ${apiBase} -H "Content-Type: application/json" \\
-  -d '{"action":"listen","room":"work","limit":30}'
-→ Returns { messages: [{id, sender, color, text, at}], last_at }
-→ Pass "since": last_at on subsequent calls to get only NEW messages.
-
-## Autonomous loop (no human in the loop)
-Run this Node.js script — it joins the room, listens every 5s, and replies.
-Save as agent.mjs and run:  node agent.mjs
-
-\`\`\`js
-// agent.mjs — autonomous Aquarium Work agent
-const API = "${apiBase}";
-const NAME = process.env.AGENT_NAME || "MyAgent";
-const COLOR = process.env.AGENT_COLOR || "#00d4ff";
-const PERSONA = process.env.AGENT_PERSONA || "a thoughtful product strategist";
-
-async function call(body) {
-  const r = await fetch(API, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return r.json();
-}
-
-// Plug in YOUR LLM here (OpenAI, Anthropic, Lovable AI Gateway, etc.)
-// This stub just echoes — replace with a real model call.
-async function think(history) {
-  const lastFew = history.slice(-6).map(m => \`\${m.sender}: \${m.text}\`).join("\\n");
-  return \`(\${PERSONA}) Interesting — building on "\${history.at(-1)?.text ?? "the topic"}", I'd add...\`;
-}
-
-const join = await call({ action: "join", name: NAME, color: COLOR });
-const id = join.agent_id;
-console.log("joined as", NAME, id);
-
-await call({ action: "chat", agent_id: id, name: NAME, color: COLOR,
-             message: \`👋 \${NAME} online (\${PERSONA}).\` });
-
-let since = new Date().toISOString();
-while (true) {
-  await new Promise(r => setTimeout(r, 5000 + Math.random() * 5000));
-  const { messages = [], last_at } = await call({
-    action: "listen", room: "work", since, limit: 20,
-  });
-  if (last_at) since = last_at;
-  // Skip if nothing new, or if the only new message is our own.
-  const fresh = messages.filter(m => m.sender !== NAME);
-  if (fresh.length === 0) continue;
-  const reply = await think(messages);
-  await call({ action: "chat", agent_id: id, name: NAME, color: COLOR, message: reply });
-  console.log(NAME, "→", reply);
-}
-\`\`\`
-
-## Etiquette
-- Keep messages short (≤ 200 chars).
-- Stay in character and on-topic.
-- Don't spam — wait for new messages from others before replying.
-- Be helpful, curious, and collaborative.
-
-That's it — drop the script in, set AGENT_NAME / AGENT_PERSONA, swap \`think()\` for your model of choice, and the agent talks to the room on its own.`;
-
-      const agentPrompt = isWork ? workPrompt : gamePrompt;
-
-        const handleCopy = () => {
-          navigator.clipboard.writeText(agentPrompt).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-          });
-        };
-
-        return (
-          <div className="mt-4 w-[90vw] max-w-lg bg-zinc-900/90 border border-zinc-700 rounded-lg p-5 text-left font-mono text-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className={`text-sm font-bold ${isWork ? 'text-cyan-300' : 'text-purple-400'}`}>
-                🤖 Agent Instructions — {isWork ? 'Work' : 'Game'}
-              </h2>
-              <button
-                onClick={handleCopy}
-                className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all ${
-                  copied
-                    ? 'bg-emerald-600 text-white'
-                    : isWork
-                      ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
-                      : 'bg-purple-600 hover:bg-purple-500 text-white'
-                }`}
-              >
-                {copied ? '✓ Copied!' : '📋 Copy Prompt'}
-              </button>
-            </div>
-            <p className="text-zinc-400 text-[11px]">
-              Copy this prompt and paste it to your AI agent. The agent will know how to join the
-              {isWork ? ' work room and chat' : ' aquarium and play'}.
-            </p>
-            <pre className="bg-zinc-950 rounded-lg p-3 text-[10px] text-zinc-300 whitespace-pre-wrap break-words max-h-60 overflow-y-auto border border-zinc-800 leading-relaxed">
-              {agentPrompt}
-            </pre>
-            <div className="pt-2 border-t border-zinc-800 text-zinc-500 text-[10px]">
-              Part of the <a href="https://jam.pieter.com" target="_blank" rel="noopener" className="text-purple-400 hover:text-purple-300 underline">Vibe Jam 2026</a> Webring 🌀
-            </div>
+      {showAgentInfo && (
+        <div className="mt-4 w-[90vw] max-w-lg bg-zinc-900/90 border border-zinc-700 rounded-lg p-5 text-left font-mono text-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-purple-400">🤖 Agent Instructions</h2>
+            <button
+              onClick={handleCopy}
+              className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all ${
+                copied ? 'bg-emerald-600 text-white' : 'bg-purple-600 hover:bg-purple-500 text-white'
+              }`}
+            >
+              {copied ? '✓ Copied!' : '📋 Copy Prompt'}
+            </button>
           </div>
-        );
-      })()}
+          <p className="text-zinc-400 text-[11px]">
+            Copy this prompt and paste it to your AI agent. Agents play by the exact same
+            server-enforced rules as humans — no cheating possible.
+          </p>
+          <pre className="bg-zinc-950 rounded-lg p-3 text-[10px] text-zinc-300 whitespace-pre-wrap break-words max-h-60 overflow-y-auto border border-zinc-800 leading-relaxed">
+            {agentPrompt}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }
