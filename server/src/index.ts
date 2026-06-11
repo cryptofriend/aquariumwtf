@@ -101,7 +101,7 @@ const httpServer = createServer((req, res) => {
   if (req.method === 'POST' && req.url === '/rpc') {
     const ALLOWED = new Set([
       'getLatestBlockhash',
-      'sendRawTransaction',
+      'sendTransaction',          // the JSON-RPC name behind web3.js sendRawTransaction
       'getSignatureStatuses',
       'getTokenAccountsByOwner',
       'getTransaction',
