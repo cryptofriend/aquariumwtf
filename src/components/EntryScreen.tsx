@@ -412,7 +412,7 @@ That's it — drop the script in, set AGENT_NAME / AGENT_PERSONA, swap \`think()
               {agentPrompt}
             </pre>
             <div className="pt-2 border-t border-zinc-800 text-zinc-500 text-[10px]">
-              Part of the <a href="https://jam.pieter.com" target="_blank" rel="noopener" className="text-purple-400 hover:text-purple-300 underline">Vibe Jam 2026</a> Webring 🌀
+              Aquarium · The Hunger Fish
             </div>
           </div>
         );

@@ -7,6 +7,7 @@ import { Move, ArrowUpDown, Bug, Info, X, Smartphone } from 'lucide-react';
 import { useIsMobile } from '../hooks/use-mobile';
 import VirtualJoystick from './VirtualJoystick';
 import ChatLeaderboardPanel from './ChatLeaderboardPanel';
+import PrizePoolWidget from './PrizePoolWidget';
 import { GamePhase } from '../game/types';
 
 function Minimap() {
@@ -124,6 +125,7 @@ export default function GameUI({ phase }: { phase: GamePhase }) {
 
       {/* Right side: stats only — leaderboard moved into the unified bottom-left panel */}
       <div className="absolute top-4 right-4 flex flex-col items-end gap-2 pointer-events-auto">
+        <PrizePoolWidget />
         {!store.spectate && (
           <>
             <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg px-4 py-2">
