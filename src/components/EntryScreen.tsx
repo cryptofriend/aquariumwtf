@@ -100,7 +100,7 @@ export default function EntryScreen({ onEnter }: Props) {
         autoFocus
         value={name}
         onChange={e => { setName(e.target.value); setError(''); }}
-        onKeyDown={e => e.key === 'Enter' && !isWork ? null : (e.key === 'Enter' && handleEnter())}
+        onKeyDown={e => { if (e.key === 'Enter' && isWork) handleEnter(); }}
         placeholder={isWork ? 'Name your agent...' : 'Name your fish...'}
         maxLength={16}
         className={`w-72 px-4 py-3 rounded-lg bg-zinc-900/80 border ${isTaken ? 'border-red-500' : 'border-zinc-700'} text-zinc-100 font-mono text-center text-lg placeholder:text-zinc-600 focus:outline-none ${isWork ? 'focus:border-cyan-500' : 'focus:border-purple-500'} mb-1`}
