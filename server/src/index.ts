@@ -94,6 +94,48 @@ const httpServer = createServer((req, res) => {
     return res.end(JSON.stringify({ ok: true, winners: world.hallOfFame }));
   }
 
+  // Solana RPC proxy: the public mainnet RPC 403-blocks browsers, but
+  // server-side requests get through. Allowlisted methods only.
+  if (req.method === 'POST' && req.url === '/rpc') {
+    const ALLOWED = new Set([
+      'getLatestBlockhash',
+      'sendRawTransaction',
+      'getSignatureStatuses',
+      'getTokenAccountsByOwner',
+      'getTransaction',
+      'getAccountInfo',
+      'simulateTransaction',
+      'getFeeForMessage',
+      'getRecentBlockhash',
+    ]);
+    let raw = '';
+    req.on('data', (chunk) => { raw += chunk; if (raw.length > 200_000) req.destroy(); });
+    req.on('end', () => {
+      void (async () => {
+        try {
+          const body = JSON.parse(raw);
+          const calls = Array.isArray(body) ? body : [body];
+          if (!calls.every((c) => ALLOWED.has(String(c?.method)))) {
+            res.writeHead(403, { ...corsHeaders, 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Method not allowed by proxy' }));
+          }
+          const upstream = await fetch(process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: raw,
+          });
+          const text = await upstream.text();
+          res.writeHead(upstream.status, { ...corsHeaders, 'Content-Type': 'application/json' });
+          res.end(text);
+        } catch {
+          res.writeHead(502, { ...corsHeaders, 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'RPC proxy error' }));
+        }
+      })();
+    });
+    return;
+  }
+
   // Redeem an on-chain ticket purchase. Credit goes to the wallet that SENT
   // the $MYTH — taken from the transaction itself, so no session needed.
   if (req.method === 'POST' && req.url === '/deposit') {

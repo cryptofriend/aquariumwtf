@@ -16,9 +16,13 @@ import {
 export const MYTH_MINT = MYTH_MINT_STR;
 export const PRIZE_POOL = PRIZE_POOL_WALLET;
 
+import { serverUrl } from '../net/gameClient';
+
+// Browsers get 403'd by the public mainnet RPC, so all RPC traffic goes
+// through the game server's allowlisted /rpc proxy by default.
 export const SOLANA_RPC =
   (import.meta.env.VITE_SOLANA_RPC as string | undefined) ||
-  'https://api.mainnet-beta.solana.com';
+  `${serverUrl().http}/rpc`;
 
 /**
  * On-chain $MYTH balance for a wallet (display only — the game server never
@@ -72,11 +76,31 @@ export async function buyTicketTx(wallet: WalletContextState): Promise<string> {
   );
 
   // Fresh blockhash at send time — cached ones expire in wallet popups
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+  const { blockhash } = await connection.getLatestBlockhash('confirmed');
   tx.recentBlockhash = blockhash;
   tx.feePayer = buyer;
 
   const signature = await wallet.sendTransaction(tx, connection);
-  await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
-  return signature;
+
+  // Poll for confirmation over plain HTTP — confirmTransaction() relies on
+  // WebSocket subscriptions, which the /rpc proxy doesn't carry.
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const res = await fetch(SOLANA_RPC, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1,
+        method: 'getSignatureStatuses',
+        params: [[signature]],
+      }),
+    });
+    const json = await res.json();
+    const st = json?.result?.value?.[0];
+    if (st?.err) throw new Error('Transaction failed on-chain');
+    if (st && (st.confirmationStatus === 'confirmed' || st.confirmationStatus === 'finalized')) {
+      return signature;
+    }
+  }
+  throw new Error('Transaction not confirmed in time — check your wallet and retry the redeem');
 }
