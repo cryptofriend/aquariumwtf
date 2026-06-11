@@ -50,7 +50,9 @@ function pushChat(from: string, color: string, text: string) {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  // '*' — web3.js sends custom headers (e.g. solana-client) that would
+  // otherwise fail the CORS preflight and surface as "Failed to fetch"
+  'Access-Control-Allow-Headers': '*',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
