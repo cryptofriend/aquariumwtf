@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { acquireSessionLock, getActiveSession, subscribeSessionLock } from '@/game/sessionLock';
+import WalletGate from './WalletGate';
 
 export type AquariumMode = 'game' | 'work';
 
