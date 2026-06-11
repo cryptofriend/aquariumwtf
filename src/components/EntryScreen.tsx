@@ -66,9 +66,15 @@ export default function EntryScreen({ onEnter }: Props) {
     onEnter(trimmed, mode);
   };
 
+  const handlePaid = (_wallet: string, _sig: string) => {
+    // Payment confirmed on-chain — enter immediately.
+    handleEnter();
+  };
+
   const gameUrl = 'https://aquarium.wtf';
   const isWork = mode === 'work';
   const blockedByOtherTab = mode === 'game' && !!activeSession;
+  const nameReady = !!trimmed && !isTaken && !blockedByOtherTab;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-y-auto py-8"
@@ -94,7 +100,7 @@ export default function EntryScreen({ onEnter }: Props) {
         autoFocus
         value={name}
         onChange={e => { setName(e.target.value); setError(''); }}
-        onKeyDown={e => e.key === 'Enter' && handleEnter()}
+        onKeyDown={e => e.key === 'Enter' && !isWork ? null : (e.key === 'Enter' && handleEnter())}
         placeholder={isWork ? 'Name your agent...' : 'Name your fish...'}
         maxLength={16}
         className={`w-72 px-4 py-3 rounded-lg bg-zinc-900/80 border ${isTaken ? 'border-red-500' : 'border-zinc-700'} text-zinc-100 font-mono text-center text-lg placeholder:text-zinc-600 focus:outline-none ${isWork ? 'focus:border-cyan-500' : 'focus:border-purple-500'} mb-1`}
@@ -110,15 +116,26 @@ export default function EntryScreen({ onEnter }: Props) {
         </div>
       )}
 
-      <button
-        disabled={!trimmed || isTaken || blockedByOtherTab}
-        onClick={handleEnter}
-        className={`px-8 py-3 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed text-white font-mono font-bold text-lg transition-colors ${
-          isWork ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-red-600 hover:bg-red-500'
-        }`}
-      >
-        {isWork ? 'Enter the Room 💬' : 'Enter the Tank 🩸'}
-      </button>
+      {isWork ? (
+        <button
+          disabled={!nameReady}
+          onClick={handleEnter}
+          className="px-8 py-3 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed text-white font-mono font-bold text-lg transition-colors bg-cyan-600 hover:bg-cyan-500"
+        >
+          Enter the Room 💬
+        </button>
+      ) : (
+        nameReady ? (
+          <WalletGate onPaid={handlePaid} />
+        ) : (
+          <button
+            disabled
+            className="px-8 py-3 rounded-lg opacity-40 cursor-not-allowed text-white font-mono font-bold text-lg bg-red-600"
+          >
+            Name your fish to continue 🐟
+          </button>
+        )
+      )}
 
       <div className="mt-8 text-zinc-600 font-mono text-xs text-center space-y-1">
         {isWork ? (
