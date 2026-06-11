@@ -20,7 +20,7 @@ export interface GameStore {
   spectate: boolean;
   spawnTime: number;
   immuneUntil: number;
-  portalRef: string | null;
+  
   sessionId: string;
   isBot: boolean;
 }
@@ -48,7 +48,7 @@ function createGameStore(): GameStore {
     spectate: false,
     spawnTime: 0,
     immuneUntil: 0,
-    portalRef: null,
+    
     sessionId: crypto.randomUUID(),
     isBot: false,
   };
