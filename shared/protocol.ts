@@ -45,7 +45,14 @@ export type GameEvent =
   | { kind: 'leave'; name: string }
   | { kind: 'respawn'; name: string; playerId: string }
   | { kind: 'round_start'; endsAt: number; pot: number }
-  | { kind: 'round_end'; winner: Standing | null; standings: Standing[]; pot: number };
+  | {
+      kind: 'round_end';
+      winner: Standing | null;
+      standings: Standing[];
+      pot: number;          // gross tickets staked
+      burned: number;       // 20% of the pot, removed forever
+      winnerShare: number;  // pot - burned, credited to the winner
+    };
 
 // ─── client → server ───
 export type ClientMsg =

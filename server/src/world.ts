@@ -11,7 +11,7 @@ import {
   TANK_HALF, INITIAL_WEIGHT, MIN_WEIGHT, FOOD_WEIGHT, MAX_FOOD, FOOD_SPAWN_MS,
   BITE_COOLDOWN_MS, SPAWN_IMMUNITY_MS, MIN_PLAYERS, COUNTDOWN_MS, ROUND_MS,
   RESULTS_MS, FRENZY_MS, AGENT_TIMEOUT_MS, ENTRY_COST_TOKENS,
-  RESPAWN_GRACE_MS,
+  RESPAWN_GRACE_MS, potBurn,
   speedFor, eatRadiusFor, biteRangeFor, biteDamage, decayPerSecond,
 } from '../../shared/constants';
 import type { GameEvent, NetFood, NetPlayer, Phase, SnapshotMsg, Standing } from '../../shared/protocol';
@@ -81,7 +81,9 @@ export class World {
   /** While one fish remains: deadline for buy-backs before the round ends (0 = inactive). */
   graceEndsAt = 0;
   /** Recent round winners — the new all-time ranks source (server lifetime). */
-  hallOfFame: { name: string; wallet: string; weight: number; kills: number; pot: number; at: number }[] = [];
+  hallOfFame: { name: string; wallet: string; weight: number; kills: number; pot: number; burned: number; at: number }[] = [];
+  /** Lifetime tickets burned (20% of every pot) — to be burned on-chain. */
+  totalBurned = 0;
 
   private events: GameEvent[] = [];
   private lastTickAt = 0;
@@ -402,19 +404,24 @@ export class World {
       );
     const winner = standings[0] ?? null;
 
-    // Winner takes the whole pot, credited as tickets (on-chain $MYTH payout
-    // is the next milestone — the accounting stays identical).
+    // 20% of the pot is burned; the winner takes the remaining 80%
+    // (credited as tickets — the matching $MYTH burn happens on-chain in
+    // the payout milestone; totalBurned tracks the obligation).
+    const burned = winner ? potBurn(this.pot) : 0;
+    const winnerShare = this.pot - burned;
     if (winner) {
       const winnerPlayer = participants.find((p) => p.name === winner.name);
       if (winnerPlayer) {
-        winnerPlayer.tokens += this.pot;
+        winnerPlayer.tokens += winnerShare;
+        this.totalBurned += burned;
         if (winnerPlayer.wallet) this.walletBalances.set(winnerPlayer.wallet, winnerPlayer.tokens);
         this.hallOfFame.unshift({
           name: winner.name,
           wallet: winnerPlayer.wallet ? `${winnerPlayer.wallet.slice(0, 4)}…${winnerPlayer.wallet.slice(-4)}` : '',
           weight: winner.weight,
           kills: winner.kills,
-          pot: this.pot,
+          pot: winnerShare,
+          burned,
           at: now,
         });
         if (this.hallOfFame.length > 50) this.hallOfFame.pop();
@@ -424,7 +431,7 @@ export class World {
     this.phase = 'results';
     this.phaseEndsAt = now + RESULTS_MS;
     this.graceEndsAt = 0;
-    this.emit({ kind: 'round_end', winner, standings, pot: this.pot });
+    this.emit({ kind: 'round_end', winner, standings, pot: this.pot, burned, winnerShare });
   }
 
   private toLobby(now: number) {

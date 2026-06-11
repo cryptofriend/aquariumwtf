@@ -129,7 +129,7 @@ function RoundBanner() {
   );
 }
 
-function ResultsOverlay({ standings, pot }: { standings: Standing[]; pot: number }) {
+function ResultsOverlay({ standings, pot, burned }: { standings: Standing[]; pot: number; burned: number }) {
   const winner = standings[0];
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-auto bg-black/60 backdrop-blur-sm">
@@ -138,7 +138,8 @@ function ResultsOverlay({ standings, pot }: { standings: Standing[]; pot: number
         {winner ? (
           <>
             <h2 className="text-2xl font-bold text-amber-300 mb-1">{winner.name} wins!</h2>
-            <p className="text-amber-200 text-lg font-bold mb-1">+{pot} 🪙 — winner takes the pot</p>
+            <p className="text-amber-200 text-lg font-bold mb-1">+{pot - burned} 🎟 — 80% of the pot</p>
+            {burned > 0 && <p className="text-orange-400 text-sm font-bold mb-1">🔥 {burned} 🎟 burned forever</p>}
             <p className="text-zinc-400 text-sm mb-5">{winner.weight.toFixed(1)}kg · {winner.kills} kills</p>
           </>
         ) : (
@@ -187,6 +188,7 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
   const [showMobileControls, setShowMobileControls] = useState(true);
   const [standings, setStandings] = useState<Standing[] | null>(null);
   const [lastPot, setLastPot] = useState(0);
+  const [lastBurned, setLastBurned] = useState(0);
   const [killerName, setKillerName] = useState('');
   const [dismissedDeath, setDismissedDeath] = useState(false);
   const isMobile = useIsMobile();
@@ -211,7 +213,7 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
   }), []);
 
   useEffect(() => on('event', (e) => {
-    if (e.kind === 'round_end') { setStandings(e.standings); setLastPot(e.pot); }
+    if (e.kind === 'round_end') { setStandings(e.standings); setLastPot(e.pot); setLastBurned(e.burned); }
     if (e.kind === 'round_start') { setStandings(null); setKillerName(''); setDismissedDeath(false); }
     if (e.kind === 'kill' && e.victimId === net.selfId) { setKillerName(e.attacker); setDismissedDeath(false); }
     if (e.kind === 'respawn' && e.playerId === net.selfId) {
@@ -354,7 +356,7 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
               <li>1 ticket = <span className="text-yellow-300">1 $MYTH</span>, bought on the entry screen</li>
               <li>Entering a round costs <span className="text-yellow-300">1 ticket</span> — it goes into the pot</li>
               <li>Died? <span className="text-yellow-300">Re-enter for 1 ticket</span> — as many times as you can afford</li>
-              <li>The winner takes the <span className="text-amber-300 font-bold">whole pot</span></li>
+              <li>The winner takes <span className="text-amber-300 font-bold">80% of the pot</span> · <span className="text-orange-400 font-bold">20% is burned 🔥</span></li>
               <li>👀 <span className="text-zinc-400">No ticket? Spectate for free</span></li>
             </ul>
           </div>
@@ -374,8 +376,8 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
           <div>
             <div className="text-cyan-300 text-[10px] font-bold uppercase tracking-wider mb-1">🎮 Controls</div>
             <ul className="text-zinc-300 text-[11px] space-y-1 list-disc list-inside">
-              <li>Swim with <span className="text-yellow-300">WASD</span>, rise/dive with <span className="text-yellow-300">Q/E</span></li>
-              <li>Or just point the mouse where you want to go</li>
+              <li>Swim with <span className="text-yellow-300">WASD / arrows</span>, rise/dive with <span className="text-yellow-300">Q/E</span></li>
+              <li>On mobile: virtual joystick + buttons</li>
               <li><span className="text-yellow-300">Space</span> / BITE button — bite the nearest fish in range</li>
             </ul>
           </div>
@@ -449,7 +451,7 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
         </div>
       )}
 
-      {net.phase === 'results' && standings && <ResultsOverlay standings={standings} pot={lastPot} />}
+      {net.phase === 'results' && standings && <ResultsOverlay standings={standings} pot={lastPot} burned={lastBurned} />}
     </div>
   );
 }

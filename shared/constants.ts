@@ -22,8 +22,8 @@ export const FOOD_SPAWN_MS = 2000;
 export const BITE_COOLDOWN_MS = 1200;
 export const SPAWN_IMMUNITY_MS = 5000;
 
-// Movement
-export const MAX_SPEED = 14;
+// Movement (halved from the original 14 — deliberate, more tactical pace)
+export const MAX_SPEED = 7;
 
 // Round lifecycle
 export const MIN_PLAYERS = 2;
@@ -41,6 +41,12 @@ export const AGENT_TIMEOUT_MS = 10_000;
 // (credited as tickets; on-chain payout is the next milestone).
 export const ENTRY_COST_TOKENS = 1;   // charged per round entry AND per re-entry
 export const TICKET_PRICE_MYTH = 1;   // $MYTH per ticket ($MYTH has 6 decimals)
+/** Share of every round pot that is burned; the rest goes to the winner. */
+export const POT_BURN_RATE = 0.2;
+/** Tickets burned from a pot (rounds down — small pots favor the winner). */
+export function potBurn(pot: number): number {
+  return Math.floor(pot * POT_BURN_RATE);
+}
 export const MYTH_DECIMALS = 6;
 export const MYTH_MINT = '2WhsBBy6V3LiG42fMqBfK2fbZL677ugkQYXxPx83pump';
 export const PRIZE_POOL_WALLET = 'BUZkgjP1QjYd9YJcUNhpFXFvQBPiqwGMaZNBecuGvR4M';

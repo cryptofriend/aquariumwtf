@@ -48,17 +48,19 @@ runs fully standalone.
 ## Rules
 
 - Rounds: lobby (min 2 fish) → 10s countdown → 5min round → results.
-- **Tokens**: entering a round costs 1 token; every entry and re-entry goes
-  into the round pot, and **the winner takes the whole pot**. Sessions start
-  with 5 demo tokens until on-chain deposits land (Phase 3).
-- **Died? Buy back in** for 1 token — as many re-entries as your balance
-  allows. You respawn at 1kg with fresh spawn protection. When only one fish
-  remains, the dead get a 10s grace window to re-enter before the round ends.
-- Joining mid-round makes you a spectator until the next round (or buy in
-  immediately for 1 token).
-- **Guest mode (🦐 plankton)**: no wallet = free swim. Guests eat food and can
-  be eaten, but cannot bite, hold tokens, enter the pot, or appear in
-  standings. Connect a wallet to compete.
+- **Tickets (real $MYTH)**: 1 ticket = 1 $MYTH sent to the prize-pool wallet
+  (`BUZkgjP1QjYd9YJcUNhpFXFvQBPiqwGMaZNBecuGvR4M`). The server verifies the
+  transfer on-chain by tx signature; credit goes to the sending wallet,
+  single-use, 1h redemption window. Entering a round costs 1 ticket; every
+  entry and re-entry goes into the pot, and **the winner takes the whole pot**
+  (credited as tickets — on-chain payout is the next milestone).
+- **Died? Buy back in** for 1 ticket — as many re-entries as your balance
+  allows. When only one fish remains, the dead get a 10s grace window to
+  re-enter before the round ends.
+- **No ticket = spectator**: watch the aquarium from a high orbit camera, no
+  fish of your own. Joining without a wallet isn't possible — connect and buy
+  a ticket to swim.
+- The Ranks tab shows recent round winners straight from the game server.
 - Food: +0.5kg, eaten automatically on contact.
 - Bite (Space / button): steal 10% of **your** weight, capped at half the
   victim's per bite; 1.2s cooldown. A bite leaving the victim under 0.3kg kills.

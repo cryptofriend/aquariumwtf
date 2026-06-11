@@ -164,8 +164,6 @@ function ProximityLabels() {
 export default function TankScene() {
   const { camera } = useThree();
   const keys = useRef<Set<string>>(new Set());
-  const mouseWorld = useRef(new THREE.Vector3());
-  const mouseActive = useRef(false);
 
   // Keyboard
   useEffect(() => {
@@ -182,25 +180,7 @@ export default function TankScene() {
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
   }, []);
 
-  // Mouse → point on the y=0 plane the fish is attracted to
-  useEffect(() => {
-    const onMove = (cx: number, cy: number) => {
-      const ndc = new THREE.Vector2((cx / window.innerWidth) * 2 - 1, -(cy / window.innerHeight) * 2 + 1);
-      const raycaster = new THREE.Raycaster();
-      raycaster.setFromCamera(ndc, camera);
-      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-      const target = new THREE.Vector3();
-      if (raycaster.ray.intersectPlane(plane, target)) {
-        mouseWorld.current.copy(target);
-        mouseActive.current = true;
-      }
-    };
-    const mh = (e: MouseEvent) => onMove(e.clientX, e.clientY);
-    window.addEventListener('mousemove', mh);
-    return () => window.removeEventListener('mousemove', mh);
-  }, [camera]);
-
-  // Input → server, camera follow
+  // Input → server, camera follow (keys + virtual joystick only — no mouse)
   useFrame(() => {
     const me = self();
 
@@ -219,12 +199,6 @@ export default function TankScene() {
         dir.z += joystickState.y;
       }
       if (joystickState.upDown !== 0) dir.y += joystickState.upDown;
-
-      // No direct input → drift gently toward the mouse pointer
-      if (dir.lengthSq() < 0.01 && mouseActive.current) {
-        tmpVec.set(mouseWorld.current.x - me.cx, 0, mouseWorld.current.z - me.cz);
-        if (tmpVec.length() > 2) dir.copy(tmpVec.normalize().multiplyScalar(0.5));
-      }
 
       if (dir.lengthSq() > 1) dir.normalize();
       const bite = biteRequest.pending;

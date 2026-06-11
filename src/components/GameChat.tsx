@@ -38,7 +38,9 @@ export default function GameChat({ embedded = false, fillParent = false }: Props
       case 'respawn': sys(`🪙 ${e.name} bought back in (+1 to the pot)`); break;
       case 'bite': sys(`🦷 ${e.attacker} bit ${e.victim} for ${e.damage.toFixed(1)}kg`); break;
       case 'round_start': sys('⚔️ Round started — eat or get eaten!'); break;
-      case 'round_end': sys(e.winner ? `🏆 ${e.winner.name} won the round at ${e.winner.weight.toFixed(1)}kg and takes the pot (${e.pot}🪙)!` : '🏁 Round over'); break;
+      case 'round_end': sys(e.winner
+        ? `🏆 ${e.winner.name} won at ${e.winner.weight.toFixed(1)}kg — takes ${e.winnerShare}🎟${e.burned > 0 ? ` · ${e.burned}🎟 burned 🔥` : ''}`
+        : '🏁 Round over'); break;
     }
   }), [push]);
 

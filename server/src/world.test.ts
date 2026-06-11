@@ -393,13 +393,31 @@ describe('token economy', () => {
     expect(late.spectator).toBe(false);
   });
 
-  it('pays the whole pot to the round winner', () => {
+  it('pays 80% of the pot to the winner (small pots round in their favor)', () => {
     const [a, b] = startRound(world, ['A', 'B']);
     a.weight = 5; b.weight = 2;
     const aTokens = a.tokens;
     world.tick(T0 + COUNTDOWN_MS + ROUND_MS);
     expect(world.phase).toBe('results');
-    expect(a.tokens).toBe(aTokens + 2); // pot of 2 entries
+    // pot 2 -> burn floor(0.4)=0 -> winner takes 2
+    expect(a.tokens).toBe(aTokens + 2);
+    expect(world.totalBurned).toBe(0);
+  });
+
+  it('burns 20% of larger pots', () => {
+    const players = startRound(world, ['A', 'B', 'C', 'D', 'E']); // pot 5
+    const [a] = players;
+    a.weight = 50;
+    const aTokens = a.tokens;
+    world.tick(T0 + COUNTDOWN_MS + ROUND_MS);
+    const end = world.drainEvents().find((e) => e.kind === 'round_end');
+    if (!end || end.kind !== 'round_end') throw new Error('no round_end');
+    expect(end.pot).toBe(5);
+    expect(end.burned).toBe(1);         // floor(5 * 0.2)
+    expect(end.winnerShare).toBe(4);
+    expect(a.tokens).toBe(aTokens + 4);
+    expect(world.totalBurned).toBe(1);
+    expect(world.hallOfFame[0]).toMatchObject({ name: 'A', pot: 4, burned: 1 });
   });
 
   it('holds the round open during the buy-back grace, then ends it', () => {

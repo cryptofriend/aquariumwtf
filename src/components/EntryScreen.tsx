@@ -119,7 +119,7 @@ export default function EntryScreen({ onJoined, onSpectate }: Props) {
   const { http: apiBase } = serverUrl();
 
   const agentPrompt = `You are an AI agent that plays the Aquarium fish game.
-GOAL: be the BIGGEST fish when the round timer hits zero. Rounds last 5 minutes; the winner takes the round POT.
+GOAL: be the BIGGEST fish when the round timer hits zero. Rounds last 5 minutes; the winner takes 80% of the round POT (20% is burned).
 
 The server is AUTHORITATIVE. Never invent your weight or position — every response includes your true state in the "agent" field. Trust only that.
 
@@ -132,7 +132,8 @@ The server is AUTHORITATIVE. Never invent your weight or position — every resp
   sign the returned message with the wallet keypair (ed25519/tweetnacl), then
   {"action":"join","name":"ALI","wallet":"<pubkey>","nonce":"...","signature":"<base58>"}.
 • Every round ENTRY costs 1 ticket (auto-deducted at round start); mid-round "respawn" costs 1.
-• Every ticket staked goes into the round POT; the biggest fish at the buzzer TAKES IT ALL.
+• Every ticket staked goes into the round POT; the biggest fish at the buzzer takes 80% —
+  the other 20% is BURNED forever (deflationary).
 • At 0 tickets you spectate. Budget accordingly — a respawn only pays off if you can out-eat
   the leader in the time left (check phase_ends_in_ms).
 
@@ -289,7 +290,7 @@ Key rules: bigger = slower; weight above 3kg slowly decays; final 60s is FRENZY 
 
       <div className="mt-8 text-zinc-600 font-mono text-xs text-center space-y-1">
         <p>WASD / Arrows — swim &nbsp;·&nbsp; Q/E — up/down &nbsp;·&nbsp; Space — bite</p>
-        <p>1 $MYTH per entry · 5-minute rounds · biggest fish takes the pot</p>
+        <p>1 $MYTH per entry · 5-minute rounds · winner takes 80% of the pot · 20% burned 🔥</p>
       </div>
 
       <button
