@@ -160,23 +160,28 @@ function ResultsOverlay({ standings, pot }: { standings: Standing[]; pot: number
   );
 }
 
-/** Highlighted banner for plankton-mode players. */
-function GuestBanner() {
+/** Highlighted banner for watch-only spectators. */
+function SpectatorBanner({ onExit }: { onExit: () => void }) {
   return (
     <div className="absolute top-16 left-1/2 -translate-x-1/2 pointer-events-auto">
-      <div className="bg-amber-500/15 backdrop-blur-sm border-2 border-amber-400 rounded-lg px-5 py-2 font-mono text-center shadow-lg shadow-amber-900/40 animate-pulse">
-        <span className="text-amber-300 text-xs font-bold uppercase tracking-wider">
-          🦐 Guest mode — swim &amp; eat plankton only · no bites, no prizes
+      <div className="bg-cyan-500/15 backdrop-blur-sm border-2 border-cyan-400 rounded-lg px-5 py-2 font-mono text-center shadow-lg shadow-cyan-900/40">
+        <span className="text-cyan-300 text-xs font-bold uppercase tracking-wider">
+          👀 Spectating the aquarium
         </span>
         <div className="text-zinc-300 text-[10px] mt-0.5">
-          Connect a Solana wallet on the entry screen to hunt and win the pot
+          Want in? <button onClick={onExit} className="underline text-amber-300 hover:text-amber-200">Buy a ticket (1 $MYTH) on the entry screen</button>
         </div>
       </div>
     </div>
   );
 }
 
-export default function GameUI() {
+interface GameUIProps {
+  spectateOnly?: boolean;
+  onExit?: () => void;
+}
+
+export default function GameUI({ spectateOnly = false, onExit = () => {} }: GameUIProps) {
   const [, setTick] = useState(0);
   const [showRules, setShowRules] = useState(false);
   const [showMobileControls, setShowMobileControls] = useState(true);
@@ -191,12 +196,18 @@ export default function GameUI() {
     return () => clearInterval(id);
   }, []);
 
-  // Surface server-side rejections (e.g. respawn with 0 tokens)
+  // Surface server-side rejections (e.g. respawn with 0 tickets)
   useEffect(() => on('status', () => {
     if (net.lastError) {
       toast.error(net.lastError);
       net.lastError = '';
     }
+  }), []);
+
+  // Ticket purchases redeemed mid-session
+  useEffect(() => on('deposit', (d) => {
+    if (d.ok) toast.success(`${d.message} — balance ${d.balance}🎟`);
+    else toast.error(d.message);
   }), []);
 
   useEffect(() => on('event', (e) => {
@@ -223,16 +234,16 @@ export default function GameUI() {
 
   const liveEntries = [...net.players.values()]
     .filter((p) => !p.spectator)
-    .map((p) => ({ name: p.name, kills: p.kills, dead: p.dead, weight: p.weight, isMe: p.id === net.selfId, bot: p.bot, guest: p.guest }))
-    .sort((a, b) => Number(a.guest) - Number(b.guest) || Number(!b.dead) - Number(!a.dead) || b.weight - a.weight);
+    .map((p) => ({ name: p.name, kills: p.kills, dead: p.dead, weight: p.weight, isMe: p.id === net.selfId, bot: p.bot }))
+    .sort((a, b) => Number(!b.dead) - Number(!a.dead) || b.weight - a.weight);
 
-  const canBite = me && !me.dead && !me.spectator && !me.guest && inRound;
+  const canBite = me && !me.dead && !me.spectator && inRound;
   const biteReady = Date.now() - net.lastBiteSentAt > BITE_COOLDOWN_MS;
 
   return (
     <div className="fixed inset-0 z-40 pointer-events-none font-mono">
       <RoundBanner />
-      {me?.guest && <GuestBanner />}
+      {spectateOnly && <SpectatorBanner onExit={onExit} />}
 
       {/* Live standings */}
       <div className="absolute top-4 left-4 pointer-events-auto bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg p-3 min-w-[200px]">
@@ -242,8 +253,8 @@ export default function GameUI() {
         {liveEntries.slice(0, 8).map((e, i) => (
           <div key={i} className={`flex items-center gap-2 text-xs py-0.5 ${e.dead ? 'opacity-40 line-through' : ''} ${e.isMe ? 'bg-white/10 rounded px-1 -mx-1' : ''}`}>
             <span className="text-zinc-400 w-4">{i + 1}</span>
-            <span className={`truncate flex-1 ${e.isMe ? 'text-yellow-300 font-bold' : e.guest ? 'text-zinc-500' : 'text-zinc-200'}`}>
-              {e.name}{e.bot ? ' 🤖' : ''}{e.guest ? ' 🦐' : ''}{e.isMe ? ' (you)' : ''}
+            <span className={`truncate flex-1 ${e.isMe ? 'text-yellow-300 font-bold' : 'text-zinc-200'}`}>
+              {e.name}{e.bot ? ' 🤖' : ''}{e.isMe ? ' (you)' : ''}
             </span>
             <span className="text-amber-400">{e.weight.toFixed(1)}kg</span>
             <span className="text-red-400">{e.kills}🗡</span>
@@ -256,14 +267,8 @@ export default function GameUI() {
       <div className="absolute top-4 right-4 flex flex-col items-end gap-2 pointer-events-auto">
         {me && (
           <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg px-4 py-2 text-right">
-            {me.guest ? (
-              <span className="text-amber-300 text-sm font-bold">🦐 guest</span>
-            ) : (
-              <>
-                <span className="text-amber-300 text-xl font-bold">{me.tokens}</span>
-                <span className="text-zinc-500 text-xs ml-1">🪙 tokens</span>
-              </>
-            )}
+            <span className="text-amber-300 text-xl font-bold">{me.tokens}</span>
+            <span className="text-zinc-500 text-xs ml-1">🎟 tickets</span>
             {me.wallet && (
               <div className="text-emerald-400 text-[10px] mt-0.5">◎ {me.wallet}</div>
             )}
@@ -278,7 +283,7 @@ export default function GameUI() {
             <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg px-4 py-2">
               <span className="text-amber-400 text-xl font-bold">{me.weight.toFixed(1)}</span>
               <span className="text-zinc-500 text-xs ml-1">kg</span>
-              {!me.guest && <span className="text-zinc-600 text-[10px] ml-2">bite: {(me.weight * 0.1).toFixed(1)}kg</span>}
+              <span className="text-zinc-600 text-[10px] ml-2">bite: {(me.weight * 0.1).toFixed(1)}kg</span>
             </div>
             {me.immune && !me.dead && (
               <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-lg px-3 py-1.5">
@@ -289,13 +294,15 @@ export default function GameUI() {
         )}
         {me?.spectator && (
           <div className="bg-cyan-500/15 border border-cyan-500/40 rounded-lg px-3 py-1.5 flex flex-col items-end gap-1.5">
-            <span className="text-cyan-300 text-[10px] font-bold uppercase tracking-wider">👻 Spectating — you play next round</span>
+            <span className="text-cyan-300 text-[10px] font-bold uppercase tracking-wider">
+              {me.tokens >= 1 ? '👻 Spectating — you swim next round' : '🎟 No tickets — buy one on the entry screen'}
+            </span>
             {inRound && me.tokens >= 1 && (
               <button
                 onClick={() => sendRespawn()}
                 className="px-3 py-1.5 rounded-md bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold transition-colors"
               >
-                🪙 Buy in now — 1 token
+                🎟 Buy in now — 1 ticket
               </button>
             )}
           </div>
@@ -342,13 +349,13 @@ export default function GameUI() {
           </div>
 
           <div className="mb-3 p-2 rounded-md bg-yellow-500/10 border border-yellow-500/30">
-            <div className="text-yellow-300 text-[10px] font-bold uppercase tracking-wider mb-1">🪙 Tokens</div>
+            <div className="text-yellow-300 text-[10px] font-bold uppercase tracking-wider mb-1">🎟 Tickets</div>
             <ul className="text-zinc-300 text-[11px] space-y-1 list-disc list-inside">
-              <li>Entering a round costs <span className="text-yellow-300">1 token</span> — it goes into the pot</li>
-              <li>Died? <span className="text-yellow-300">Re-enter for 1 token</span> — as many times as you can afford</li>
+              <li>1 ticket = <span className="text-yellow-300">1 $MYTH</span>, bought on the entry screen</li>
+              <li>Entering a round costs <span className="text-yellow-300">1 ticket</span> — it goes into the pot</li>
+              <li>Died? <span className="text-yellow-300">Re-enter for 1 ticket</span> — as many times as you can afford</li>
               <li>The winner takes the <span className="text-amber-300 font-bold">whole pot</span></li>
-              <li>You start with 5 demo tokens (real $MYTH coming soon)</li>
-              <li>🦐 <span className="text-zinc-400">Guests (no wallet) swim &amp; eat plankton only — no bites, no prizes</span></li>
+              <li>👀 <span className="text-zinc-400">No ticket? Spectate for free</span></li>
             </ul>
           </div>
 
@@ -424,7 +431,6 @@ export default function GameUI() {
           kills={me.kills}
           weight={me.weight}
           tokens={me.tokens}
-          isGuest={me.guest}
           graceMsLeft={net.graceEndsAt > 0 ? Math.max(0, net.graceEndsAt - (Date.now() + net.clockSkew)) : 0}
           onRespawn={() => sendRespawn()}
           onSpectate={() => setDismissedDeath(true)}

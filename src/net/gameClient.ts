@@ -77,6 +77,7 @@ const listeners = {
   chat: new Set<Listener<ChatMessage>>(),
   snapshot: new Set<Listener<SnapshotMsg>>(),
   status: new Set<Listener<NetState['status']>>(),
+  deposit: new Set<Listener<{ ok: boolean; message: string; balance?: number }>>(),
 };
 
 export function on<K extends keyof typeof listeners>(
@@ -195,6 +196,10 @@ function handleMessage(msg: ServerMsg) {
       fire('chat', { from: msg.from, color: msg.color, text: msg.text, ts: msg.ts });
       break;
 
+    case 'deposit_result':
+      fire('deposit', { ok: msg.ok, message: msg.message, balance: msg.balance });
+      break;
+
     case 'error':
       if (msg.code === 'join_failed' && joinResolve) {
         joinResolve(msg.message);
@@ -261,8 +266,14 @@ export function sendChat(text: string): void {
   socket.send(JSON.stringify({ t: 'chat', text }));
 }
 
-/** Buy back into the current round for 1 token (dead or spectating). */
+/** Buy back into the current round for 1 ticket (dead or spectating). */
 export function sendRespawn(): void {
   if (!socket || socket.readyState !== WebSocket.OPEN || !net.joined) return;
   socket.send(JSON.stringify({ t: 'respawn' }));
+}
+
+/** Redeem an on-chain ticket purchase mid-session. */
+export function sendDeposit(signature: string): void {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify({ t: 'deposit', signature }));
 }

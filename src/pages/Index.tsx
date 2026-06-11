@@ -5,8 +5,10 @@ import Tank3D from '../components/Tank3D';
 import { connect, disconnect, net, on } from '../net/gameClient';
 import { releaseSessionLock } from '../game/sessionLock';
 
+type Mode = 'entry' | 'playing' | 'spectating';
+
 export default function Index() {
-  const [joined, setJoined] = useState(false);
+  const [mode, setMode] = useState<Mode>('entry');
 
   // Observer connection for the entry screen (live counts), cleaned up on unmount
   useEffect(() => {
@@ -19,16 +21,21 @@ export default function Index() {
 
   // If the server connection drops for good, fall back to the entry screen
   useEffect(() => on('status', (s) => {
-    if (s === 'closed' && !net.joined) setJoined(false);
+    if (s === 'closed' && !net.joined) setMode((m) => (m === 'playing' ? 'entry' : m));
   }), []);
 
   return (
     <>
-      {!joined && <EntryScreen onJoined={() => setJoined(true)} />}
-      {joined && (
+      {mode === 'entry' && (
+        <EntryScreen
+          onJoined={() => setMode('playing')}
+          onSpectate={() => setMode('spectating')}
+        />
+      )}
+      {mode !== 'entry' && (
         <>
           <Tank3D />
-          <GameUI />
+          <GameUI spectateOnly={mode === 'spectating'} onExit={() => setMode('entry')} />
         </>
       )}
     </>

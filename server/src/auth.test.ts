@@ -3,7 +3,6 @@ import nacl from 'tweetnacl';
 import bs58 from 'bs58';
 import { issueNonce, verifyLogin, loginMessage, isValidPubkey } from './auth';
 import { World } from './world';
-import { STARTING_TOKENS } from '../../shared/constants';
 
 function makeWallet() {
   const kp = nacl.sign.keyPair();
@@ -79,18 +78,13 @@ describe('wallet-bound balances', () => {
     expect(r2.player.wallet).toBe(w.pubkey);
   });
 
-  it('gives new wallets the demo allowance; guests play free with zero', () => {
+  it('starts new wallets at zero tickets and rejects wallet-less humans', () => {
     const world = new World();
     const w = makeWallet();
     const r = world.join('Fresh', '#fff', false, T0, w.pubkey);
     if ('error' in r) throw new Error(r.error);
-    expect(r.player.tokens).toBe(STARTING_TOKENS);
-    expect(r.player.guest).toBe(false);
-    const guest = world.join('Guest', '#fff', false, T0);
-    if ('error' in guest) throw new Error(guest.error);
-    expect(guest.player.tokens).toBe(0);
-    expect(guest.player.guest).toBe(true);
-    expect(guest.player.wallet).toBeNull();
+    expect(r.player.tokens).toBe(0);
+    expect(world.join('NoWallet', '#fff', false, T0)).toHaveProperty('error');
   });
 
   it('blocks the same wallet from joining twice concurrently', () => {

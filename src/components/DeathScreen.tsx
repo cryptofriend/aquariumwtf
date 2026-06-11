@@ -3,18 +3,17 @@ interface Props {
   kills: number;
   weight: number;
   tokens: number;
-  isGuest: boolean;
   graceMsLeft: number;   // >0 → round ends soon unless someone buys back in
   onRespawn: () => void;
   onSpectate: () => void;
 }
 
 /**
- * Shown when you die mid-round. Re-enter for 1 token (as many times as your
+ * Shown when you die mid-round. Re-enter for 1 ticket (as many times as your
  * balance allows) or spectate until the next round.
  */
-export default function DeathScreen({ killerName, kills, weight, tokens, isGuest, graceMsLeft, onRespawn, onSpectate }: Props) {
-  const canRespawn = !isGuest && tokens >= 1;
+export default function DeathScreen({ killerName, kills, weight, tokens, graceMsLeft, onRespawn, onSpectate }: Props) {
+  const canRespawn = tokens >= 1;
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center pointer-events-auto"
       style={{ background: 'radial-gradient(ellipse at center, rgba(59,10,10,0.92) 0%, rgba(26,5,5,0.92) 100%)' }}>
@@ -39,15 +38,13 @@ export default function DeathScreen({ killerName, kills, weight, tokens, isGuest
       )}
 
       <div className="flex gap-4 mt-2">
-        {!isGuest && (
-          <button
-            onClick={onRespawn}
-            disabled={!canRespawn}
-            className="px-8 py-3 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed border border-red-500 text-white font-mono font-bold text-lg transition-colors"
-          >
-            🪙 Re-enter — 1 token
-          </button>
-        )}
+        <button
+          onClick={onRespawn}
+          disabled={!canRespawn}
+          className="px-8 py-3 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed border border-red-500 text-white font-mono font-bold text-lg transition-colors"
+        >
+          🎟 Re-enter — 1 ticket
+        </button>
         <button
           onClick={onSpectate}
           className="px-8 py-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-200 font-mono font-bold text-lg transition-colors"
@@ -56,11 +53,9 @@ export default function DeathScreen({ killerName, kills, weight, tokens, isGuest
         </button>
       </div>
       <p className="font-mono text-xs mt-3 text-zinc-500">
-        {isGuest
-          ? '🦐 Guest fish are plankton — connect a Solana wallet to hunt and win the pot'
-          : canRespawn
-            ? `${tokens} token${tokens === 1 ? '' : 's'} left — every re-entry grows the pot`
-            : 'Out of tokens — win a pot or wait for the next round'}
+        {canRespawn
+          ? `${tokens} ticket${tokens === 1 ? '' : 's'} left — every re-entry grows the pot`
+          : 'Out of tickets — buy more on the entry screen (1 $MYTH each) or win a pot'}
       </p>
     </div>
   );

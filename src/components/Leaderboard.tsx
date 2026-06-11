@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { Trophy } from 'lucide-react';
+import { serverUrl } from '../net/gameClient';
 
-interface LeaderboardEntry {
-  player_name: string;
+interface Winner {
+  name: string;
+  wallet: string;
   weight: number;
   kills: number;
-  survival_seconds: number;
-  is_bot: boolean;
+  pot: number;
+  at: number;
 }
 
 interface Props {
@@ -15,66 +16,61 @@ interface Props {
   chrome?: boolean;
 }
 
+/**
+ * Hall of fame: recent round winners straight from the game server.
+ * (The legacy Supabase table from the client-authoritative era is retired —
+ * every entry here came out of a real, server-adjudicated round.)
+ */
 export default function Leaderboard({ chrome = true }: Props = {}) {
-  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [winners, setWinners] = useState<Winner[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetch = async () => {
-      const { data } = await supabase
-        .from('leaderboard')
-        .select('player_name, weight, kills, survival_seconds, is_bot')
-        .order('weight', { ascending: false })
-        .limit(1000);
-      if (data) setEntries(data as LeaderboardEntry[]);
-      setLoading(false);
+    let cancelled = false;
+    const load = () => {
+      fetch(`${serverUrl().http}/winners`)
+        .then((r) => r.json())
+        .then((d) => { if (!cancelled && d.ok) setWinners(d.winners); })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setLoading(false); });
     };
-    fetch();
-    const interval = setInterval(fetch, 15000);
-    return () => clearInterval(interval);
+    load();
+    const id = setInterval(load, 15_000);
+    return () => { cancelled = true; clearInterval(id); };
   }, []);
 
-  const body = (
-    <>
-      {chrome && (
-        <div className="text-amber-400 text-xs font-bold mb-2 uppercase tracking-wider flex items-center gap-1.5">
-          <Trophy size={12} /> All-Time Best
+  const list = (
+    <div className="space-y-1">
+      {loading && <div className="text-zinc-600 text-[11px] text-center py-4">Loading…</div>}
+      {!loading && winners.length === 0 && (
+        <div className="text-zinc-600 text-[11px] text-center py-4">
+          No champions yet — win a round to make history 🏆
         </div>
       )}
-      {loading ? (
-        <div className="text-zinc-600 text-xs">Loading...</div>
-      ) : entries.length === 0 ? (
-        <div className="text-zinc-600 text-xs">No scores yet</div>
-      ) : (
-        entries.map((e, i) => (
-          <div key={i} className="flex items-center gap-1.5 text-xs py-0.5">
-            <span className={`w-4 ${i < 3 ? 'text-amber-400 font-bold' : 'text-zinc-500'}`}>
-              {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
-            </span>
-            <span
-              title={e.is_bot ? 'AI agent' : 'Human player'}
-              className={`text-[9px] px-1 rounded ${
-                e.is_bot
-                  ? 'bg-cyan-900/60 text-cyan-300 border border-cyan-700/40'
-                  : 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/40'
-              }`}
-            >
-              {e.is_bot ? '🤖' : '🧑'}
-            </span>
-            <span className="truncate flex-1 text-zinc-200">{e.player_name}</span>
-            <span className="text-amber-400">{Number(e.weight).toFixed(1)}kg</span>
-            <span className="text-red-400">{e.kills}🗡</span>
-          </div>
-        ))
-      )}
-    </>
+      {winners.map((w, i) => (
+        <div key={`${w.at}-${i}`} className="flex items-center gap-2 text-xs py-0.5">
+          <span className="w-5 text-center">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : <span className="text-zinc-500">{i + 1}</span>}</span>
+          <span className="truncate flex-1 text-zinc-200">
+            {w.name}
+            {w.wallet && <span className="text-emerald-500 text-[9px] ml-1">◎{w.wallet}</span>}
+          </span>
+          <span className="text-amber-400">{w.weight.toFixed(1)}kg</span>
+          <span className="text-yellow-300">+{w.pot}🎟</span>
+          <span className="text-red-400">{w.kills}🗡</span>
+        </div>
+      ))}
+    </div>
   );
 
-  if (!chrome) return body;
+  if (!chrome) return list;
 
   return (
-    <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg p-3 min-w-[200px] max-w-[240px]">
-      {body}
+    <div className="bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg p-3">
+      <div className="flex items-center gap-1.5 mb-2">
+        <Trophy size={12} className="text-amber-400" />
+        <span className="text-amber-300 text-xs font-bold uppercase tracking-wider">Round Winners</span>
+      </div>
+      {list}
     </div>
   );
 }

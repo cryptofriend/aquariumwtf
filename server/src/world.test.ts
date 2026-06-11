@@ -3,23 +3,20 @@ import { World, Player } from './world';
 import {
   INITIAL_WEIGHT, MIN_WEIGHT, SPAWN_IMMUNITY_MS, BITE_COOLDOWN_MS,
   COUNTDOWN_MS, ROUND_MS, RESULTS_MS, FRENZY_MS, AGENT_TIMEOUT_MS, FOOD_WEIGHT,
-  STARTING_TOKENS, RESPAWN_GRACE_MS,
+  RESPAWN_GRACE_MS,
   biteDamage,
 } from '../../shared/constants';
 
 const T0 = 1_000_000;
+/** Tickets every test player is funded with (simulating on-chain purchases). */
+const FUND = 5;
 
-/** Joins a STAKED player (fake wallet) — the default competitor in tests. */
+/** Joins a funded player (fake wallet + FUND tickets) — the default competitor. */
 function joinPlayer(world: World, name: string, now = T0, isBot = false): Player {
+  if (!isBot) world.creditDeposit(`WALLET_${name}`, FUND);
   const result = world.join(name, '#fff', isBot, now, isBot ? null : `WALLET_${name}`);
   if ('error' in result) throw new Error(result.error);
-  return result.player;
-}
-
-/** Joins a wallet-less human: plankton mode. */
-function joinGuest(world: World, name: string, now = T0): Player {
-  const result = world.join(name, '#fff', false, now, null);
-  if ('error' in result) throw new Error(result.error);
+  if (isBot) result.player.tokens = FUND; // agents funded directly in tests
   return result.player;
 }
 
@@ -316,8 +313,8 @@ describe('token economy', () => {
 
   it('charges 1 token per round entry and builds the pot', () => {
     const [a, b] = startRound(world, ['A', 'B']);
-    expect(a.tokens).toBe(STARTING_TOKENS - 1);
-    expect(b.tokens).toBe(STARTING_TOKENS - 1);
+    expect(a.tokens).toBe(FUND - 1);
+    expect(b.tokens).toBe(FUND - 1);
     expect(world.pot).toBe(2);
   });
 
@@ -371,7 +368,7 @@ describe('token economy', () => {
       rebuys++;
       now += 1000;
     }
-    expect(rebuys).toBe(STARTING_TOKENS - 1); // entry took 1, rest spent on re-entries
+    expect(rebuys).toBe(FUND - 1); // entry took 1, rest spent on re-entries
     expect(b.tokens).toBe(0);
   });
 
@@ -430,17 +427,6 @@ describe('token economy', () => {
     expect(world.phase).toBe('round');               // fight goes on
   });
 
-  it('refills broke players in the lobby (demo faucet)', () => {
-    const [a, b] = startRound(world, ['A', 'B']);
-    b.dead = true;
-    b.tokens = 0;
-    const tEnd = T0 + COUNTDOWN_MS + 30_000;
-    world.tick(tEnd);                    // → results
-    world.tick(tEnd + RESULTS_MS);       // → lobby
-    expect(b.tokens).toBe(STARTING_TOKENS);
-    expect(a.tokens).toBeGreaterThan(0); // winner keeps real balance, no refill
-  });
-
   it('ends immediately when one fish remains and nobody can afford a re-entry', () => {
     const [a, b] = startRound(world, ['A', 'B']);
     b.dead = true;
@@ -450,93 +436,74 @@ describe('token economy', () => {
   });
 });
 
-describe('guest mode (plankton)', () => {
+describe('ticket gate', () => {
   let world: World;
   beforeEach(() => { world = new World(); });
 
-  it('guests join free with zero tokens', () => {
-    const g = joinGuest(world, 'Guesty');
-    expect(g.guest).toBe(true);
-    expect(g.tokens).toBe(0);
+  it('rejects human joins without a wallet', () => {
+    const r = world.join('NoWallet', '#fff', false, T0, null);
+    expect(r).toHaveProperty('error');
   });
 
-  it('guests do not count toward starting a round', () => {
-    joinGuest(world, 'G1');
-    joinGuest(world, 'G2');
+  it('new wallets start with zero tickets and get benched at round start', () => {
+    const r = world.join('Broke', '#fff', false, T0, 'WALLET_BROKE');
+    if ('error' in r) throw new Error(r.error);
+    expect(r.player.tokens).toBe(0);
+    startRound(world, ['A', 'B']);
+    expect(r.player.participant).toBe(false);
+    expect(r.player.spectator).toBe(true);   // no fish in the round
+    expect(world.pot).toBe(2);               // only funded entries staked
+  });
+
+  it('broke wallets do not count toward starting a round (no faucet)', () => {
+    world.join('B1', '#fff', false, T0, 'WALLET_B1');
+    world.join('B2', '#fff', false, T0, 'WALLET_B2');
     world.tick(T0);
-    expect(world.phase).toBe('lobby');   // nobody can stake
-    joinPlayer(world, 'P1');
-    joinPlayer(world, 'P2');
-    world.tick(T0 + 100);
-    expect(world.phase).toBe('countdown');
+    expect(world.phase).toBe('lobby');       // nobody can pay → no countdown
   });
 
-  it('guests swim through rounds without paying or participating', () => {
-    const g = joinGuest(world, 'Guesty');
-    startRound(world, ['A', 'B']);
-    expect(g.participant).toBe(false);
-    expect(g.spectator).toBe(false);   // free to swim, not benched
-    expect(g.tokens).toBe(0);
-    expect(world.pot).toBe(2);         // only the two staked entries
+  it('credits deposits to a live player immediately', () => {
+    const r = world.join('Buyer', '#fff', false, T0, 'WALLET_BUYER');
+    if ('error' in r) throw new Error(r.error);
+    const balance = world.creditDeposit('WALLET_BUYER', 3);
+    expect(balance).toBe(3);
+    expect(r.player.tokens).toBe(3);
   });
 
-  it('guests can eat food', () => {
-    const g = joinGuest(world, 'Guesty');
-    startRound(world, ['A', 'B']);
-    g.pos = { x: 0, y: 0, z: 0 };
-    world.food.push({ id: 'plankton', x: 0.5, y: 0, z: 0 });
-    world.tick(T0 + COUNTDOWN_MS + 1000);
-    expect(g.weight).toBeGreaterThan(INITIAL_WEIGHT);
+  it('credits deposits to offline wallets and restores them on join', () => {
+    world.creditDeposit('WALLET_LATER', 2);
+    expect(world.balanceOf('WALLET_LATER')).toBe(2);
+    const r = world.join('Later', '#fff', false, T0, 'WALLET_LATER');
+    if ('error' in r) throw new Error(r.error);
+    expect(r.player.tokens).toBe(2);
   });
 
-  it('guests cannot bite', () => {
-    const g = joinGuest(world, 'Guesty');
-    const [a] = startRound(world, ['A', 'B']);
-    const now = T0 + COUNTDOWN_MS + SPAWN_IMMUNITY_MS + 1000;
-    setUpFight(g, a, now);
-    const result = world.performBite(g, a.id, now);
-    expect(result.ok).toBe(false);
-  });
-
-  it('guests can be bitten (they are prey)', () => {
-    const g = joinGuest(world, 'Guesty');
-    const [a] = startRound(world, ['A', 'B']);
-    const now = T0 + COUNTDOWN_MS + SPAWN_IMMUNITY_MS + 1000;
-    setUpFight(a, g, now);
-    const result = world.performBite(a, g.id, now);
-    expect(result.ok).toBe(true);
-  });
-
-  it('guests never appear in standings or win the pot', () => {
-    const g = joinGuest(world, 'Guesty');
+  it('benched players never refill between rounds (no demo faucet)', () => {
+    const r = world.join('Broke', '#fff', false, T0, 'WALLET_BROKE');
+    if ('error' in r) throw new Error(r.error);
     const [a, b] = startRound(world, ['A', 'B']);
-    g.weight = 50;                      // fattest fish in the tank…
+    b.dead = true; b.tokens = 0;
+    const tEnd = T0 + COUNTDOWN_MS + 30_000;
+    world.tick(tEnd);                  // → results
+    world.tick(tEnd + RESULTS_MS);     // → lobby
+    expect(r.player.tokens).toBe(0);
+    expect(b.tokens).toBe(0);          // loser stays broke until they buy/win
+  });
+
+  it("syncs the winner's pot credit to the wallet balance", () => {
+    const [a, b] = startRound(world, ['A', 'B']);
     a.weight = 5; b.weight = 2;
     world.tick(T0 + COUNTDOWN_MS + ROUND_MS);
-    const end = world.drainEvents().find((e) => e.kind === 'round_end');
-    if (!end || end.kind !== 'round_end') throw new Error('no round_end');
-    expect(end.winner?.name).toBe('A'); // …but the staked fish wins
-    expect(end.standings.map((s) => s.name)).not.toContain('Guesty');
+    expect(world.balanceOf('WALLET_A')).toBe(FUND - 1 + 2); // refund entry + b's stake
   });
 
-  it('a swimming guest does not keep the round open', () => {
-    const g = joinGuest(world, 'Guesty');
-    const [, b] = startRound(world, ['A', 'B']);
-    b.dead = true;
-    b.tokens = 0;
-    world.tick(T0 + COUNTDOWN_MS + 30_000);
-    expect(world.phase).toBe('results'); // guest alive ≠ round alive
-  });
-
-  it('guests cannot respawn/buy in and stay broke through the lobby faucet', () => {
-    const g = joinGuest(world, 'Guesty');
-    startRound(world, ['A', 'B']);
-    const r = world.respawn(g.id, T0 + COUNTDOWN_MS + 1000);
-    expect(r.ok).toBe(false);
-    const tEnd = T0 + COUNTDOWN_MS + ROUND_MS;
-    world.tick(tEnd);
-    world.tick(tEnd + RESULTS_MS);      // → lobby (faucet runs)
-    expect(g.tokens).toBe(0);
+  it('records round winners in the hall of fame', () => {
+    const [a, b] = startRound(world, ['A', 'B']);
+    a.weight = 7; b.weight = 2;
+    world.tick(T0 + COUNTDOWN_MS + ROUND_MS);
+    expect(world.hallOfFame).toHaveLength(1);
+    expect(world.hallOfFame[0]).toMatchObject({ name: 'A', pot: 2, weight: 7 });
+    expect(world.hallOfFame[0].wallet).toContain('…');
   });
 });
 

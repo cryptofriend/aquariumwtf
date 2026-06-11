@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
 import {
   TANK_HALF, INITIAL_WEIGHT, MIN_WEIGHT, FOOD_WEIGHT, MAX_FOOD, FOOD_SPAWN_MS,
   BITE_COOLDOWN_MS, SPAWN_IMMUNITY_MS, MIN_PLAYERS, COUNTDOWN_MS, ROUND_MS,
-  RESULTS_MS, FRENZY_MS, AGENT_TIMEOUT_MS, STARTING_TOKENS, ENTRY_COST_TOKENS,
+  RESULTS_MS, FRENZY_MS, AGENT_TIMEOUT_MS, ENTRY_COST_TOKENS,
   RESPAWN_GRACE_MS,
   speedFor, eatRadiusFor, biteRangeFor, biteDamage, decayPerSecond,
 } from '../../shared/constants';
@@ -26,11 +26,8 @@ export interface Player {
   name: string;
   color: string;
   isBot: boolean;
-  /** Solana wallet (base58) when signed in; null for guests/agents. */
+  /** Solana wallet (base58). Required for humans; optional for agents. */
   wallet: string | null;
-  /** Plankton mode: human without a wallet. Swims and eats only — no bites,
-   *  no entry fee, no pot eligibility. Agents are never guests. */
-  guest: boolean;
   pos: Vec3;
   vel: Vec3;
   desired: Vec3;            // unit direction the player wants to swim
@@ -83,6 +80,8 @@ export class World {
   pot = 0;
   /** While one fish remains: deadline for buy-backs before the round ends (0 = inactive). */
   graceEndsAt = 0;
+  /** Recent round winners — the new all-time ranks source (server lifetime). */
+  hallOfFame: { name: string; wallet: string; weight: number; kills: number; pot: number; at: number }[] = [];
 
   private events: GameEvent[] = [];
   private lastTickAt = 0;
@@ -102,6 +101,9 @@ export class World {
       (p) => p.name.toLowerCase() === trimmed.toLowerCase(),
     );
     if (taken) return { error: 'Name already taken' };
+    if (!isBot && !wallet) {
+      return { error: 'A Solana wallet is required to play — or just spectate' };
+    }
     if (wallet) {
       const walletInUse = [...this.players.values()].some((p) => p.wallet === wallet);
       if (walletInUse) return { error: 'This wallet is already in the tank (another tab or device?)' };
@@ -114,7 +116,6 @@ export class World {
       color: color || '#70a1ff',
       isBot,
       wallet,
-      guest: !isBot && !wallet,
       pos: randomPos(),
       vel: { x: 0, y: 0, z: 0 },
       desired: { x: 0, y: 0, z: 0 },
@@ -122,11 +123,9 @@ export class World {
       weight: INITIAL_WEIGHT,
       maxWeight: INITIAL_WEIGHT,
       kills: 0,
-      // Signed-in wallets resume their saved balance; new wallets and agents
-      // start with the demo allowance; guests play free and stakeless.
-      tokens: wallet
-        ? this.walletBalances.get(wallet) ?? STARTING_TOKENS
-        : isBot ? STARTING_TOKENS : 0,
+      // Tickets are bought on-chain (1 $MYTH each). Wallets resume their
+      // saved balance; everyone else starts at zero and spectates.
+      tokens: wallet ? this.walletBalances.get(wallet) ?? 0 : 0,
       dead: false,
       spectator: this.phase === 'round',  // mid-round joiners spectate or buy in
       participant: false,
@@ -156,6 +155,24 @@ export class World {
   bySecret(secret: string): Player | undefined {
     const id = this.secretIndex.get(secret);
     return id ? this.players.get(id) : undefined;
+  }
+
+  /** Credit verified on-chain ticket purchases to the paying wallet. */
+  creditDeposit(wallet: string, tickets: number): number {
+    const live = [...this.players.values()].find((p) => p.wallet === wallet);
+    if (live) {
+      live.tokens += tickets;
+      this.walletBalances.set(wallet, live.tokens);
+      return live.tokens;
+    }
+    const balance = (this.walletBalances.get(wallet) ?? 0) + tickets;
+    this.walletBalances.set(wallet, balance);
+    return balance;
+  }
+
+  balanceOf(wallet: string): number {
+    const live = [...this.players.values()].find((p) => p.wallet === wallet);
+    return live ? live.tokens : this.walletBalances.get(wallet) ?? 0;
   }
 
   // ─── inputs (the ONLY way clients influence the world) ───────────
@@ -240,7 +257,6 @@ export class World {
         bot: p.isBot,
         tokens: p.tokens,
         wallet: p.wallet ? `${p.wallet.slice(0, 4)}…${p.wallet.slice(-4)}` : '',
-        guest: p.guest,
       })),
       food: this.food,
       alive: this.aliveParticipants().length,
@@ -313,14 +329,8 @@ export class World {
     this.food = [];
     this.pot = 0;
     for (const p of this.players.values()) {
-      // Guests swim through rounds as plankton-eaters: free, stakeless,
-      // never participants — they can't bite or win the pot.
-      if (p.guest) {
-        p.participant = false;
-        p.spectator = false;
-      } else
-      // Entry fee: 1 token per round. Broke fish spectate until they win
-      // a pot (or, in Phase 3, deposit more on-chain).
+      // Entry fee: 1 ticket per round. No ticket → spectate until you buy
+      // another or win a pot.
       if (p.tokens >= ENTRY_COST_TOKENS) {
         p.tokens -= ENTRY_COST_TOKENS;
         this.pot += ENTRY_COST_TOKENS;
@@ -353,7 +363,6 @@ export class World {
   respawn(id: string, now: number): { ok: true; tokensLeft: number } | { ok: false; reason: string } {
     const p = this.players.get(id);
     if (!p) return { ok: false, reason: 'Unknown player' };
-    if (p.guest) return { ok: false, reason: 'Guest mode — connect a Solana wallet to enter rounds and win the pot' };
     if (this.phase !== 'round') return { ok: false, reason: 'No active round — you join the next one automatically' };
     if (p.participant && !p.dead) return { ok: false, reason: 'You are still alive' };
     if (p.tokens < ENTRY_COST_TOKENS) return { ok: false, reason: 'Out of tokens' };
@@ -393,11 +402,23 @@ export class World {
       );
     const winner = standings[0] ?? null;
 
-    // Winner takes the whole pot (Phase 3 swaps this credit for an
-    // on-chain payout — the accounting stays identical).
+    // Winner takes the whole pot, credited as tickets (on-chain $MYTH payout
+    // is the next milestone — the accounting stays identical).
     if (winner) {
       const winnerPlayer = participants.find((p) => p.name === winner.name);
-      if (winnerPlayer) winnerPlayer.tokens += this.pot;
+      if (winnerPlayer) {
+        winnerPlayer.tokens += this.pot;
+        if (winnerPlayer.wallet) this.walletBalances.set(winnerPlayer.wallet, winnerPlayer.tokens);
+        this.hallOfFame.unshift({
+          name: winner.name,
+          wallet: winnerPlayer.wallet ? `${winnerPlayer.wallet.slice(0, 4)}…${winnerPlayer.wallet.slice(-4)}` : '',
+          weight: winner.weight,
+          kills: winner.kills,
+          pot: this.pot,
+          at: now,
+        });
+        if (this.hallOfFame.length > 50) this.hallOfFame.pop();
+      }
     }
 
     this.phase = 'results';
@@ -413,10 +434,6 @@ export class World {
     this.pot = 0;
     this.graceEndsAt = 0;
     for (const p of this.players.values()) {
-      // DEMO ONLY: broke fish get a fresh balance between rounds so the demo
-      // never dead-ends (guests stay at 0 — they play free and stakeless).
-      // Remove when Phase 3 on-chain deposits replace this.
-      if (!p.guest && p.tokens < ENTRY_COST_TOKENS) p.tokens = STARTING_TOKENS;
       p.participant = false;
       p.spectator = false;
       p.dead = false;
@@ -493,7 +510,6 @@ export class World {
   performBite(attacker: Player, targetId: string | null, now: number):
     { ok: false; reason: string } | { ok: true; victim: Player; damage: number; killed: boolean } {
     if (this.phase !== 'round') return { ok: false, reason: 'No active round — bites only count during a round' };
-    if (attacker.guest) return { ok: false, reason: 'Guest fish can only swim and eat plankton — connect a wallet to hunt' };
     if (attacker.dead || attacker.spectator) return { ok: false, reason: 'You are not in the round' };
     if (now - attacker.lastBiteAt < BITE_COOLDOWN_MS) return { ok: false, reason: 'Bite on cooldown' };
 

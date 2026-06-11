@@ -35,11 +35,15 @@ export const FRENZY_MS = 60_000;  // final stretch of a round: decay ramps up
 // Agents (HTTP API) are dropped from the tank if silent for this long
 export const AGENT_TIMEOUT_MS = 10_000;
 
-// ─── Token economy ───
-// Until on-chain payment lands (Phase 3), every session starts with a demo
-// balance. The spend side (entry, re-entry, pot) is the real production logic.
-export const STARTING_TOKENS = 5;
+// ─── Token economy (real tickets) ───
+// 1 game ticket = 1 $MYTH sent to the prize-pool wallet, verified on-chain by
+// the server. No ticket → spectator only. The winner takes the round pot
+// (credited as tickets; on-chain payout is the next milestone).
 export const ENTRY_COST_TOKENS = 1;   // charged per round entry AND per re-entry
+export const TICKET_PRICE_MYTH = 1;   // $MYTH per ticket ($MYTH has 6 decimals)
+export const MYTH_DECIMALS = 6;
+export const MYTH_MINT = '2WhsBBy6V3LiG42fMqBfK2fbZL677ugkQYXxPx83pump';
+export const PRIZE_POOL_WALLET = 'BUZkgjP1QjYd9YJcUNhpFXFvQBPiqwGMaZNBecuGvR4M';
 /** When one fish remains, dead players get this long to buy back in before the round ends. */
 export const RESPAWN_GRACE_MS = 10_000;
 

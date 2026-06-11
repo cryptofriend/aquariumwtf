@@ -10,6 +10,7 @@ export {
   BITE_COOLDOWN_MS,
   SPAWN_IMMUNITY_MS,
   MIN_PLAYERS,
+  TICKET_PRICE_MYTH,
   scaleFor,
   biteRangeFor,
   eatRadiusFor,

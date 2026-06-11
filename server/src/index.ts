@@ -15,6 +15,7 @@ import { World } from './world';
 import { handleAgentAction } from './agentApi';
 import { persistRoundResults, leaderboardEnabled } from './leaderboard';
 import { issueNonce, verifyLogin, isValidPubkey } from './auth';
+import { verifyDeposit } from './deposits';
 
 const PORT = Number(process.env.PORT) || 8787;
 const CHAT_LIMIT_MS = 1500;
@@ -81,6 +82,44 @@ const httpServer = createServer((req, res) => {
     return res.end(JSON.stringify({ ok: true, nonce, message }));
   }
 
+  if (req.method === 'GET' && req.url?.startsWith('/balance')) {
+    const url = new URL(req.url, 'http://localhost');
+    const wallet = url.searchParams.get('wallet') || '';
+    res.writeHead(200, { ...corsHeaders, 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ ok: true, wallet, tickets: isValidPubkey(wallet) ? world.balanceOf(wallet) : 0 }));
+  }
+
+  if (req.method === 'GET' && req.url === '/winners') {
+    res.writeHead(200, { ...corsHeaders, 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ ok: true, winners: world.hallOfFame }));
+  }
+
+  // Redeem an on-chain ticket purchase. Credit goes to the wallet that SENT
+  // the $MYTH — taken from the transaction itself, so no session needed.
+  if (req.method === 'POST' && req.url === '/deposit') {
+    let raw = '';
+    req.on('data', (chunk) => { raw += chunk; if (raw.length > 8_000) req.destroy(); });
+    req.on('end', () => {
+      void (async () => {
+        let body: { signature?: string };
+        try { body = JSON.parse(raw); } catch {
+          res.writeHead(400, { ...corsHeaders, 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }));
+        }
+        const result = await verifyDeposit(String(body.signature || ''));
+        if (!result.ok) {
+          res.writeHead(200, { ...corsHeaders, 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ ok: false, error: result.reason }));
+        }
+        const balance = world.creditDeposit(result.wallet, result.tickets);
+        console.log(`[deposit] ${result.wallet} bought ${result.tickets} ticket(s) — balance ${balance}`);
+        res.writeHead(200, { ...corsHeaders, 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, wallet: result.wallet, tickets: result.tickets, balance }));
+      })();
+    });
+    return;
+  }
+
   if (req.method === 'POST' && req.url === '/agent') {
     let raw = '';
     req.on('data', (chunk) => { raw += chunk; if (raw.length > 64_000) req.destroy(); });
@@ -101,14 +140,15 @@ const httpServer = createServer((req, res) => {
         }
         lastChatAt.set(body.agent_id, Date.now());
       }
-      const { status, data } = handleAgentAction(body, {
+      void handleAgentAction(body, {
         world,
         chatLog,
         sendChat: pushChat,
         now: () => Date.now(),
+      }).then(({ status, data }) => {
+        res.writeHead(status, { ...corsHeaders, 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
       });
-      res.writeHead(status, { ...corsHeaders, 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(data));
     });
     return;
   }
@@ -171,6 +211,24 @@ wss.on('connection', (ws) => {
         if (!result.ok) {
           send(ws, { t: 'error', code: 'respawn_failed', message: result.reason });
         }
+        break;
+      }
+      case 'deposit': {
+        const sig = String(msg.signature || '');
+        void verifyDeposit(sig).then((result) => {
+          if (!result.ok) {
+            return send(ws, { t: 'deposit_result', ok: false, message: result.reason });
+          }
+          const balance = world.creditDeposit(result.wallet, result.tickets);
+          console.log(`[deposit] ${result.wallet} bought ${result.tickets} ticket(s) — balance ${balance}`);
+          send(ws, {
+            t: 'deposit_result',
+            ok: true,
+            message: `🎟 ${result.tickets} ticket${result.tickets === 1 ? '' : 's'} added`,
+            tickets: result.tickets,
+            balance,
+          });
+        });
         break;
       }
       case 'chat': {

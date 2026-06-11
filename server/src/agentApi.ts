@@ -11,8 +11,11 @@
 import {
   TANK_HALF, INITIAL_WEIGHT, MIN_WEIGHT, FOOD_WEIGHT, BITE_COOLDOWN_MS,
   SPAWN_IMMUNITY_MS, AGENT_TIMEOUT_MS, ROUND_MS,
+  TICKET_PRICE_MYTH, MYTH_MINT, PRIZE_POOL_WALLET,
   eatRadiusFor, biteRangeFor,
 } from '../../shared/constants';
+import { verifyLogin } from './auth';
+import { verifyDeposit } from './deposits';
 import type { World, Player } from './world';
 
 export const GAME_RULES = {
@@ -28,8 +31,8 @@ export const GAME_RULES = {
   death_condition: `a bite leaving you below ${MIN_WEIGHT}kg kills you`,
   size_speed: 'bigger fish swim slower; mass above 3kg slowly decays',
   rounds: `play happens in timed rounds (${ROUND_MS / 60000} min). Biggest fish at the buzzer wins the POT. Joining mid-round makes you a spectator until the next round starts (or use "respawn" to buy in immediately).`,
-  tokens: 'YOU NEED TOKENS TO PLAY: every round entry costs 1 token (auto-deducted at round start) and each mid-round "respawn" costs 1 token — as many re-entries as your balance allows. All stakes form the round pot; the winner takes it all. Your balance is agent.tokens (5 demo tokens to start; broke fish refill in the lobby during the demo). At 0 tokens you spectate.',
-  guests: 'fish marked guest:true are wallet-less humans in plankton mode — they cannot bite you or win the pot, but they CAN be bitten. Easy prey, but they never appear in standings.',
+  tickets: `YOU NEED TICKETS TO PLAY. 1 ticket = ${TICKET_PRICE_MYTH} $MYTH (mint ${MYTH_MINT}) sent to the prize pool wallet ${PRIZE_POOL_WALLET}. After the transfer confirms, call {"action":"deposit","signature":"<tx sig>"} — the ticket is credited to the SENDING wallet, so join with that wallet's auth (see "join"). Every round entry costs 1 ticket (auto-deducted at round start) and each mid-round "respawn" costs 1 ticket. All stakes form the round pot; the WINNER TAKES IT ALL (credited as tickets). At 0 tickets you spectate.`,
+  wallet_auth: 'to claim a wallet\'s tickets, join with {"wallet":"<pubkey>","nonce":"<from GET /auth/nonce?wallet=...>","signature":"<base58 ed25519 signature of the nonce message>"}. Sign with the wallet\'s keypair (e.g. tweetnacl.sign.detached).',
   inactivity_timeout_ms: AGENT_TIMEOUT_MS,
   recommended_move_interval_ms: 500,
   recommended_look_interval_ms: 1500,
@@ -64,7 +67,7 @@ export interface AgentApiDeps {
   now: () => number;
 }
 
-export function handleAgentAction(body: Record<string, unknown>, deps: AgentApiDeps): { status: number; data: unknown } {
+export async function handleAgentAction(body: Record<string, unknown>, deps: AgentApiDeps): Promise<{ status: number; data: unknown }> {
   const { world, chatLog, sendChat } = deps;
   const now = deps.now();
   const action = String(body.action || '');
@@ -77,7 +80,17 @@ export function handleAgentAction(body: Record<string, unknown>, deps: AgentApiD
 
   switch (action) {
     case 'join': {
-      const result = world.join(String(body.name || ''), String(body.color || '#70a1ff'), true, now);
+      // Optional wallet auth — required to spend that wallet's tickets
+      let wallet: string | null = null;
+      if (body.wallet || body.nonce || body.signature) {
+        if (typeof body.wallet !== 'string' || typeof body.nonce !== 'string' || typeof body.signature !== 'string') {
+          return { status: 400, data: { ok: false, error: 'Wallet auth needs wallet + nonce + signature together' } };
+        }
+        const verdict = verifyLogin(body.wallet, body.nonce, body.signature, now);
+        if (!verdict.ok) return { status: 401, data: { ok: false, error: `Wallet login failed: ${verdict.reason}` } };
+        wallet = body.wallet;
+      }
+      const result = world.join(String(body.name || ''), String(body.color || '#70a1ff'), true, now, wallet);
       if ('error' in result) return { status: 400, data: { ok: false, error: result.error } };
       return {
         status: 200,
@@ -149,6 +162,18 @@ export function handleAgentAction(body: Record<string, unknown>, deps: AgentApiD
       };
     }
 
+    case 'deposit': {
+      // Credits the wallet that SENT the $MYTH on-chain — independent of any
+      // session. Join with that wallet's auth to spend the tickets.
+      const result = await verifyDeposit(String(body.signature || ''));
+      if (!result.ok) return { status: 200, data: { ok: false, error: result.reason } };
+      const balance = world.creditDeposit(result.wallet, result.tickets);
+      return {
+        status: 200,
+        data: { ok: true, wallet: result.wallet, tickets_added: result.tickets, balance },
+      };
+    }
+
     case 'status': {
       const p = auth();
       if (!p) return { status: 401, data: { ok: false, error: 'Unknown agent_id — call "join" first' } };
@@ -178,7 +203,6 @@ export function handleAgentAction(body: Record<string, unknown>, deps: AgentApiD
           x: q.pos.x, y: q.pos.y, z: q.pos.z,
           weight: q.weight, kills: q.kills,
           dead: q.dead, spectator: q.spectator, is_bot: q.isBot,
-          guest: q.guest,
           immune: q.immuneUntil > now,
         }))
         .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
@@ -225,7 +249,7 @@ export function handleAgentAction(body: Record<string, unknown>, deps: AgentApiD
     default:
       return {
         status: 400,
-        data: { ok: false, error: `Unknown action '${action}'. Valid: join, move, bite, respawn, look, status, chat, listen, eat (deprecated).` },
+        data: { ok: false, error: `Unknown action '${action}'. Valid: join, move, bite, respawn, deposit, look, status, chat, listen, eat (deprecated).` },
       };
   }
 }

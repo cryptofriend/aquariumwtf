@@ -1,21 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import bs58 from 'bs58';
 import { net, on, join, serverUrl, phaseMsLeft, WalletAuth } from '../net/gameClient';
-import { FISH_COLORS } from '../game/constants';
-import { fetchMythBalance } from '../solana/myth';
+import { FISH_COLORS, TICKET_PRICE_MYTH } from '../game/constants';
+import { fetchMythBalance, buyTicketTx } from '../solana/myth';
 import { acquireSessionLock, getActiveSession, subscribeSessionLock } from '@/game/sessionLock';
 
 interface Props {
   onJoined: () => void;
+  onSpectate: () => void;
 }
 
-export default function EntryScreen({ onJoined }: Props) {
-  const { publicKey, signMessage, connected: walletConnected } = useWallet();
+export default function EntryScreen({ onJoined, onSpectate }: Props) {
+  const walletCtx = useWallet();
+  const { publicKey, signMessage, connected: walletConnected } = walletCtx;
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [joining, setJoining] = useState(false);
+  const [buying, setBuying] = useState(false);
+  const [tickets, setTickets] = useState<number | null>(null);
   const [mythBalance, setMythBalance] = useState<number | null>(null);
   const [showAgentInfo, setShowAgentInfo] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -34,13 +38,40 @@ export default function EntryScreen({ onJoined }: Props) {
     return subscribeSessionLock(update);
   }, []);
 
-  // On-chain $MYTH balance (display only — never trusted by the server)
-  useEffect(() => {
-    if (!publicKey) { setMythBalance(null); return; }
-    let cancelled = false;
-    fetchMythBalance(publicKey.toBase58()).then((b) => { if (!cancelled) setMythBalance(b); });
-    return () => { cancelled = true; };
+  // On-chain $MYTH balance (display only) + game-ticket balance from the server
+  const refreshBalances = useCallback(() => {
+    if (!publicKey) { setMythBalance(null); setTickets(null); return; }
+    const wallet = publicKey.toBase58();
+    fetchMythBalance(wallet).then(setMythBalance);
+    fetch(`${serverUrl().http}/balance?wallet=${wallet}`)
+      .then((r) => r.json())
+      .then((d) => setTickets(d.ok ? d.tickets : null))
+      .catch(() => setTickets(null));
   }, [publicKey]);
+
+  useEffect(() => { refreshBalances(); }, [refreshBalances]);
+
+  const handleBuyTicket = async () => {
+    if (buying || !walletConnected) return;
+    setBuying(true);
+    setError('');
+    try {
+      const signature = await buyTicketTx(walletCtx);
+      const res = await fetch(`${serverUrl().http}/deposit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signature }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'Ticket verification failed');
+      setTickets(data.balance);
+      fetchMythBalance(publicKey!.toBase58()).then(setMythBalance);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ticket purchase failed');
+    } finally {
+      setBuying(false);
+    }
+  };
 
   const trimmed = name.trim();
   const fishCount = [...net.players.values()].filter((p) => !p.spectator).length;
@@ -92,13 +123,18 @@ GOAL: be the BIGGEST fish when the round timer hits zero. Rounds last 5 minutes;
 
 The server is AUTHORITATIVE. Never invent your weight or position — every response includes your true state in the "agent" field. Trust only that.
 
-═══ TOKENS (you need them to play) ═══
-• Your balance is in agent.tokens — you start with 5 demo tokens.
-• Every round ENTRY costs 1 token (deducted automatically at round start).
-• Dying mid-round? "respawn" costs 1 token — re-enter as many times as you can afford.
-• Every token spent goes into the round POT; the biggest fish at the buzzer TAKES IT ALL.
-• At 0 tokens you sit out rounds as a spectator until the lobby refill (demo) tops you up.
-• Budget accordingly: a respawn only pays off if you can realistically out-eat the leader in the time left (check phase_ends_in_ms).
+═══ TICKETS (you need them to play — real $MYTH) ═══
+• 1 ticket = ${TICKET_PRICE_MYTH} $MYTH (mint 2WhsBBy6V3LiG42fMqBfK2fbZL677ugkQYXxPx83pump)
+  transferred to the prize pool: BUZkgjP1QjYd9YJcUNhpFXFvQBPiqwGMaZNBecuGvR4M
+• After the transfer confirms: {"action":"deposit","signature":"<tx signature>"} — the ticket
+  is credited to the SENDING wallet.
+• To spend that wallet's tickets, "join" with wallet auth: GET /auth/nonce?wallet=<pubkey>,
+  sign the returned message with the wallet keypair (ed25519/tweetnacl), then
+  {"action":"join","name":"ALI","wallet":"<pubkey>","nonce":"...","signature":"<base58>"}.
+• Every round ENTRY costs 1 ticket (auto-deducted at round start); mid-round "respawn" costs 1.
+• Every ticket staked goes into the round POT; the biggest fish at the buzzer TAKES IT ALL.
+• At 0 tickets you spectate. Budget accordingly — a respawn only pays off if you can out-eat
+  the leader in the time left (check phase_ends_in_ms).
 
 API — POST ${apiBase}/agent  (Content-Type: application/json)
 
@@ -124,9 +160,12 @@ REQ:  {"action":"bite","agent_id":"<SECRET>","target_id":"<public_id>"}
 ──── 5) status ────  (drains bites you received since last poll)
 REQ:  {"action":"status","agent_id":"<SECRET>"}
 
-──── 6) respawn ────  (dead or spectating mid-round? buy in for 1 token)
+──── 6) respawn ────  (dead or spectating mid-round? buy in for 1 ticket)
 REQ:  {"action":"respawn","agent_id":"<SECRET>"}
-→ Entering a round costs 1 token; re-entry costs 1 token. agent.tokens is your balance (5 demo tokens to start). The round winner takes the whole pot.
+→ agent.tokens is your ticket balance. The round winner takes the whole pot.
+
+──── 6b) deposit ────  (redeem an on-chain ticket purchase)
+REQ:  {"action":"deposit","signature":"<solana tx signature>"}
 
 ──── 7) chat / listen ────
 REQ:  {"action":"chat","agent_id":"<SECRET>","message":"trash talk"}
@@ -138,7 +177,7 @@ STRATEGY LOOP (every ~1.5s):
   threat = nearest player with weight > mine*1.1 within 6u  → flee
   prey   = nearest player with weight < mine*0.9, not immune → chase; bite() when distance < my bite_range
   else   → move toward nearest food
-  status() to track damage; if !agent.alive: respawn() if agent.tokens >= 1, else wait for the next round.
+  status() to track damage; if !agent.alive: respawn() if agent.tokens >= 1, else spectate.
 
 Key rules: bigger = slower; weight above 3kg slowly decays; final 60s is FRENZY (everyone shrinks toward 1kg — defend your lead by eating). Good luck, fish.`;
 
@@ -174,7 +213,7 @@ Key rules: bigger = slower; weight above 3kg slowly decays; final 60s is FRENZY 
       )}
       {connected && !roundLive && <div className="mb-3" />}
 
-      {/* Solana login */}
+      {/* Solana login + ticket booth */}
       <div className="flex flex-col items-center gap-1.5 mb-4">
         <WalletMultiButton style={{
           background: walletConnected ? '#16a34a' : '#7c3aed',
@@ -184,17 +223,27 @@ Key rules: bigger = slower; weight above 3kg slowly decays; final 60s is FRENZY 
           fontFamily: 'monospace',
         }} />
         {walletConnected && publicKey ? (
-          <p className="text-zinc-400 font-mono text-[11px]">
-            {mythBalance === null
-              ? 'Checking $MYTH balance…'
-              : <>💰 <span className="text-amber-300 font-bold">{mythBalance.toLocaleString()} $MYTH</span> on-chain</>}
-            {' · '}your game tokens follow this wallet
-          </p>
+          <>
+            <p className="text-zinc-400 font-mono text-[11px]">
+              🎟 <span className="text-amber-300 font-bold">{tickets ?? '…'} ticket{tickets === 1 ? '' : 's'}</span>
+              {' · '}
+              {mythBalance === null
+                ? 'checking $MYTH…'
+                : <>💰 <span className="text-amber-300 font-bold">{mythBalance.toLocaleString()} $MYTH</span> on-chain</>}
+            </p>
+            <button
+              onClick={handleBuyTicket}
+              disabled={buying}
+              className="px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-mono font-bold text-sm transition-colors"
+            >
+              {buying ? 'Confirming on-chain…' : `🎟 Buy ticket — ${TICKET_PRICE_MYTH} $MYTH`}
+            </button>
+          </>
         ) : (
           <p className="text-zinc-500 font-mono text-[11px] text-center">
-            Connect to get game tokens, hunt other fish and win the pot.
+            Entry is <span className="text-amber-400 font-bold">1 $MYTH</span> — connect a wallet to buy your ticket.
             <br />
-            <span className="text-amber-400">Guests 🦐 swim &amp; eat plankton only — no bites, no prizes.</span>
+            No ticket? You can still watch the aquarium below. 👀
           </p>
         )}
       </div>
@@ -218,17 +267,29 @@ Key rules: bigger = slower; weight above 3kg slowly decays; final 60s is FRENZY 
         </div>
       )}
 
-      <button
-        disabled={!trimmed || !connected || joining || blockedByOtherTab}
-        onClick={handleEnter}
-        className="px-8 py-3 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed text-white font-mono font-bold text-lg transition-colors bg-red-600 hover:bg-red-500"
-      >
-        {joining ? 'Entering…' : walletConnected ? 'Enter the Tank 🩸' : 'Swim as Guest 🦐'}
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          disabled={!trimmed || !connected || joining || blockedByOtherTab || !walletConnected || (tickets ?? 0) < 1}
+          onClick={handleEnter}
+          className="px-8 py-3 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed text-white font-mono font-bold text-lg transition-colors bg-red-600 hover:bg-red-500"
+        >
+          {joining ? 'Entering…' : 'Enter the Tank 🩸'}
+        </button>
+        <button
+          onClick={onSpectate}
+          disabled={!connected}
+          className="px-6 py-3 rounded-lg disabled:opacity-40 text-cyan-200 font-mono font-bold text-lg transition-colors bg-cyan-900/60 hover:bg-cyan-800/60 border border-cyan-700"
+        >
+          Watch 👀
+        </button>
+      </div>
+      {walletConnected && (tickets ?? 0) < 1 && (
+        <p className="text-amber-400/90 font-mono text-[11px] mt-2">🎟 You need a ticket to enter — buy one above</p>
+      )}
 
       <div className="mt-8 text-zinc-600 font-mono text-xs text-center space-y-1">
         <p>WASD / Arrows — swim &nbsp;·&nbsp; Q/E — up/down &nbsp;·&nbsp; Space — bite</p>
-        <p>5-minute rounds · biggest fish wins · death = spectate until next round</p>
+        <p>1 $MYTH per entry · 5-minute rounds · biggest fish takes the pot</p>
       </div>
 
       <button

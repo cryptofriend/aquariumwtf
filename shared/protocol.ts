@@ -18,10 +18,8 @@ export interface NetPlayer {
   bot: boolean;
   /** Entry tokens left — 1 token per round entry / re-entry. */
   tokens: number;
-  /** Shortened Solana address ("2Whs…pump") when signed in; '' for guests. */
+  /** Shortened Solana address ("2Whs…pump") when signed in; '' for agents without one. */
   wallet: string;
-  /** Plankton mode: no wallet — swims and eats only, can't bite or win. */
-  guest: boolean;
 }
 
 export interface NetFood {
@@ -58,6 +56,8 @@ export type ClientMsg =
     }
   | { t: 'input'; x: number; y: number; z: number; bite?: boolean }
   | { t: 'respawn' }
+  /** Claim an on-chain $MYTH ticket purchase (tx signature, base58). */
+  | { t: 'deposit'; signature: string }
   | { t: 'chat'; text: string }
   | { t: 'ping'; ts: number };
 
@@ -80,5 +80,6 @@ export type ServerMsg =
   | SnapshotMsg
   | { t: 'event'; e: GameEvent }
   | { t: 'chat'; from: string; color: string; text: string; ts: number }
+  | { t: 'deposit_result'; ok: boolean; message: string; tickets?: number; balance?: number }
   | { t: 'pong'; ts: number }
   | { t: 'error'; code: string; message: string };

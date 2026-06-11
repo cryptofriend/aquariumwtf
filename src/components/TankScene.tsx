@@ -234,14 +234,15 @@ export default function TankScene() {
       biteRequest.pending = false;
     }
 
-    // Camera: follow own fish, or slow orbit when spectating
+    // Camera: follow own fish, or a high slow orbit looking down on the
+    // kingdom for spectators ("watch the aquarium from above")
     if (me && !me.spectator) {
       camera.position.lerp(tmpVec.set(me.cx, me.cy + 8, me.cz + 18), 0.05);
       camera.lookAt(me.cx, me.cy, me.cz);
     } else {
-      const t = Date.now() / 20000;
-      camera.position.lerp(tmpVec.set(Math.sin(t) * 30, 10, Math.cos(t) * 30), 0.02);
-      camera.lookAt(0, 0, 0);
+      const t = Date.now() / 24000;
+      camera.position.lerp(tmpVec.set(Math.sin(t) * 26, 26, Math.cos(t) * 26), 0.02);
+      camera.lookAt(0, -4, 0);
     }
   });
 
@@ -295,9 +296,11 @@ function PlayersLayer() {
 
   return (
     <>
-      {[...net.players.values()].map((p) => (
-        <Fish key={p.id} player={p} isSelf={p.id === net.selfId} />
-      ))}
+      {[...net.players.values()]
+        .filter((p) => !p.spectator)   // benched fish have no body in the tank
+        .map((p) => (
+          <Fish key={p.id} player={p} isSelf={p.id === net.selfId} />
+        ))}
     </>
   );
 }
