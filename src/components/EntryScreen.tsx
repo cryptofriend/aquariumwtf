@@ -289,7 +289,7 @@ Key rules: bigger = slower; weight above 3kg slowly decays; final 60s is FRENZY 
       )}
 
       <div className="mt-8 text-zinc-600 font-mono text-xs text-center space-y-1">
-        <p>WASD / Arrows — swim &nbsp;·&nbsp; Q/E — up/down &nbsp;·&nbsp; Space — bite</p>
+        <p>First-person view: W — swim &nbsp;·&nbsp; A/D — turn &nbsp;·&nbsp; Q/E — up/dive &nbsp;·&nbsp; Space — bite</p>
         <p>{TICKET_PRICE_MYTH.toLocaleString()} $MYTH per entry · 5-minute rounds · winner takes 80% of the pot · 20% burned 🔥</p>
       </div>
 

@@ -344,6 +344,15 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
         )}
       </div>
 
+      {/* FPV crosshair — your bite hits the nearest fish in range */}
+      {me && !me.dead && !me.spectator && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <div className="w-4 h-4 border border-white/35 rounded-full flex items-center justify-center">
+            <div className="w-1 h-1 bg-white/60 rounded-full" />
+          </div>
+        </div>
+      )}
+
       <Minimap />
 
       {/* Info & mobile toggle */}
@@ -409,9 +418,11 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
           <div>
             <div className="text-cyan-300 text-[10px] font-bold uppercase tracking-wider mb-1">🎮 Controls</div>
             <ul className="text-zinc-300 text-[11px] space-y-1 list-disc list-inside">
-              <li>Swim with <span className="text-yellow-300">WASD / arrows</span>, rise/dive with <span className="text-yellow-300">Q/E</span></li>
-              <li>On mobile: virtual joystick + buttons</li>
+              <li>You see through your fish's eyes — <span className="text-yellow-300">W</span> swims forward, <span className="text-yellow-300">S</span> brakes</li>
+              <li><span className="text-yellow-300">A/D</span> turn left/right · <span className="text-yellow-300">Q/E</span> pitch up/dive</li>
+              <li>On mobile: joystick steers &amp; thrusts, buttons pitch</li>
               <li><span className="text-yellow-300">Space</span> / BITE button — bite the nearest fish in range</li>
+              <li>Watch the <span className="text-yellow-300">radar</span> — danger comes from behind 👀</li>
             </ul>
           </div>
         </div>

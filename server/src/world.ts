@@ -103,7 +103,8 @@ export class World {
       (p) => p.name.toLowerCase() === trimmed.toLowerCase(),
     );
     if (taken) return { error: 'Name already taken' };
-    if (!isBot && !wallet) {
+    // DEV_ALLOW_NO_WALLET is for local testing only — never set in production
+    if (!isBot && !wallet && process.env.DEV_ALLOW_NO_WALLET !== '1') {
       return { error: 'A Solana wallet is required to play — or just spectate' };
     }
     if (wallet) {

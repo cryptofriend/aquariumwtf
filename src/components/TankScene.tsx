@@ -180,40 +180,59 @@ export default function TankScene() {
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); };
   }, []);
 
-  // Input → server, camera follow (keys + virtual joystick only — no mouse)
-  useFrame(() => {
+  // First-person controls: you sit in the fish's head. A/D (←/→) turn,
+  // Q/E pitch up/dive, W/↑ thrust, S/↓ brake. Joystick: x = turn, y = thrust.
+  const yawRef = useRef(0);
+  const pitchRef = useRef(0);
+  const fwd = useMemo(() => new THREE.Vector3(), []);
+
+  useFrame((_, delta) => {
     const me = self();
+    const TURN_SPEED = 2.1;   // rad/s
+    const PITCH_SPEED = 1.6;
 
     if (me && !me.dead && !me.spectator) {
-      const dir = new THREE.Vector3();
       const k = keys.current;
-      if (k.has('w') || k.has('arrowup')) dir.z -= 1;
-      if (k.has('s') || k.has('arrowdown')) dir.z += 1;
-      if (k.has('a') || k.has('arrowleft')) dir.x -= 1;
-      if (k.has('d') || k.has('arrowright')) dir.x += 1;
-      if (k.has('q')) dir.y += 1;
-      if (k.has('e')) dir.y -= 1;
+      let thrust = 0;
+      if (k.has('w') || k.has('arrowup')) thrust += 1;
+      if (k.has('s') || k.has('arrowdown')) thrust -= 0.45;
+      if (k.has('a') || k.has('arrowleft')) yawRef.current -= TURN_SPEED * delta;
+      if (k.has('d') || k.has('arrowright')) yawRef.current += TURN_SPEED * delta;
+      let pitching = false;
+      if (k.has('q')) { pitchRef.current += PITCH_SPEED * delta; pitching = true; }
+      if (k.has('e')) { pitchRef.current -= PITCH_SPEED * delta; pitching = true; }
 
-      if (Math.abs(joystickState.x) > 0.1 || Math.abs(joystickState.y) > 0.1) {
-        dir.x += joystickState.x;
-        dir.z += joystickState.y;
-      }
-      if (joystickState.upDown !== 0) dir.y += joystickState.upDown;
+      // Mobile joystick: x turns, push up to swim forward; buttons pitch
+      if (Math.abs(joystickState.x) > 0.15) yawRef.current += joystickState.x * TURN_SPEED * delta;
+      if (Math.abs(joystickState.y) > 0.15) thrust += -joystickState.y;
+      if (joystickState.upDown !== 0) { pitchRef.current += joystickState.upDown * PITCH_SPEED * delta; pitching = true; }
 
-      if (dir.lengthSq() > 1) dir.normalize();
+      // Gentle auto-level so the horizon comes back when you stop pitching
+      if (!pitching) pitchRef.current += (0 - pitchRef.current) * Math.min(1, delta * 0.5);
+      pitchRef.current = THREE.MathUtils.clamp(pitchRef.current, -1.15, 1.15);
+
+      const yaw = yawRef.current, pitch = pitchRef.current;
+      fwd.set(
+        Math.sin(yaw) * Math.cos(pitch),
+        Math.sin(pitch),
+        -Math.cos(yaw) * Math.cos(pitch),
+      );
+
+      thrust = THREE.MathUtils.clamp(thrust, -0.45, 1);
       const bite = biteRequest.pending;
       biteRequest.pending = false;
-      sendInput(dir.x, dir.y, dir.z, bite);
+      sendInput(fwd.x * thrust, fwd.y * thrust, fwd.z * thrust, bite);
+
+      // Camera in the fish's head, looking along the heading
+      const scale = scaleFor(me.weight);
+      const eyeX = me.cx + fwd.x * scale * 1.1;
+      const eyeY = me.cy + fwd.y * scale * 1.1 + scale * 0.2;
+      const eyeZ = me.cz + fwd.z * scale * 1.1;
+      camera.position.lerp(tmpVec.set(eyeX, eyeY, eyeZ), 0.45);
+      camera.lookAt(camera.position.x + fwd.x, camera.position.y + fwd.y, camera.position.z + fwd.z);
     } else {
       biteRequest.pending = false;
-    }
-
-    // Camera: follow own fish, or a high slow orbit looking down on the
-    // kingdom for spectators ("watch the aquarium from above")
-    if (me && !me.spectator) {
-      camera.position.lerp(tmpVec.set(me.cx, me.cy + 8, me.cz + 18), 0.05);
-      camera.lookAt(me.cx, me.cy, me.cz);
-    } else {
+      // Spectators & the dead: high slow orbit over the kingdom
       const t = Date.now() / 24000;
       camera.position.lerp(tmpVec.set(Math.sin(t) * 26, 26, Math.cos(t) * 26), 0.02);
       camera.lookAt(0, -4, 0);
@@ -271,9 +290,10 @@ function PlayersLayer() {
   return (
     <>
       {[...net.players.values()]
-        .filter((p) => !p.spectator)   // benched fish have no body in the tank
+        // benched fish have no body; your own fish is hidden — you're inside it
+        .filter((p) => !p.spectator && p.id !== net.selfId)
         .map((p) => (
-          <Fish key={p.id} player={p} isSelf={p.id === net.selfId} />
+          <Fish key={p.id} player={p} isSelf={false} />
         ))}
     </>
   );
