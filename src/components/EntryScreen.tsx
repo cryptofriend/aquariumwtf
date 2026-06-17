@@ -4,6 +4,7 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import bs58 from 'bs58';
 import { net, on, join, serverUrl, phaseMsLeft, WalletAuth } from '../net/gameClient';
 import { FISH_COLORS, TICKET_PRICE_MYTH } from '../game/constants';
+import { PRIZE_POOL_WALLET } from '../../shared/constants';
 import { fetchMythBalance, buyTicketTx } from '../solana/myth';
 import { acquireSessionLock, getActiveSession, subscribeSessionLock } from '@/game/sessionLock';
 
@@ -78,6 +79,10 @@ export default function EntryScreen({ onJoined, onSpectate }: Props) {
   const connected = net.status === 'open';
   const roundLive = net.phase === 'round';
   const blockedByOtherTab = !!activeSession;
+  // Connecting with the prize-pool wallet itself is a dead end: a ticket
+  // purchase would be a pool→pool self-transfer (net zero), so the server
+  // can never credit it. Block it with a clear message.
+  const isPoolWallet = !!publicKey && publicKey.toBase58() === PRIZE_POOL_WALLET;
 
   const handleEnter = async () => {
     if (!trimmed || joining) return;
@@ -223,7 +228,12 @@ Key rules: bigger = slower; weight above 3kg slowly decays; final 60s is FRENZY 
           fontSize: 13,
           fontFamily: 'monospace',
         }} />
-        {walletConnected && publicKey ? (
+        {walletConnected && publicKey && isPoolWallet ? (
+          <div className="w-80 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/40 text-red-300 font-mono text-[11px] text-center">
+            ⚠ This is the <span className="font-bold">prize-pool wallet</span> — you can't buy a ticket to yourself.
+            <br />Switch Phantom to a personal wallet that holds $MYTH, then reconnect.
+          </div>
+        ) : walletConnected && publicKey ? (
           <>
             <p className="text-zinc-400 font-mono text-[11px]">
               🎟 <span className="text-amber-300 font-bold">{tickets ?? '…'} ticket{tickets === 1 ? '' : 's'}</span>
@@ -237,7 +247,7 @@ Key rules: bigger = slower; weight above 3kg slowly decays; final 60s is FRENZY 
               disabled={buying}
               className="px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-mono font-bold text-sm transition-colors"
             >
-              {buying ? 'Confirming on-chain…' : `🎟 Buy ticket — ${TICKET_PRICE_MYTH} $MYTH`}
+              {buying ? 'Confirming on-chain…' : `🎟 Buy ticket — ${TICKET_PRICE_MYTH.toLocaleString()} $MYTH`}
             </button>
           </>
         ) : (

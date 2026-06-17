@@ -82,6 +82,10 @@ export async function buyTicketTx(wallet: WalletContextState): Promise<string> {
   const pool = new PublicKey(PRIZE_POOL);
   const buyer = wallet.publicKey;
 
+  if (buyer.toBase58() === PRIZE_POOL) {
+    throw new Error('You are connected with the prize-pool wallet — switch to a personal wallet to buy a ticket');
+  }
+
   // $MYTH is a Token-2022 mint (newer pump.fun launches) — every spl-token
   // helper must be told so, or the ATAs and program id are wrong and the
   // transfer fails on-chain.
