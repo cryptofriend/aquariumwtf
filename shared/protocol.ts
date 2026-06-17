@@ -1,6 +1,8 @@
 /** WebSocket + agent-API message types shared by server and client. */
 
-export type Phase = 'lobby' | 'countdown' | 'round' | 'results';
+// One-time 24h survival event:
+//   upcoming → (event start) → live → (event end) → ended
+export type Phase = 'upcoming' | 'live' | 'ended';
 
 export interface NetPlayer {
   id: string;          // public id — NOT an auth credential
@@ -12,11 +14,11 @@ export interface NetPlayer {
   weight: number;
   kills: number;
   dead: boolean;
-  /** Joined mid-round; swims out the round as a ghost, plays next round. */
+  /** Joined but not in the event (no ticket spent yet) — a watching ghost. */
   spectator: boolean;
   immune: boolean;
   bot: boolean;
-  /** Entry tokens left — 1 token per round entry / re-entry. */
+  /** Entry tickets left — 1 ticket per entry / re-entry. */
   tokens: number;
   /** Shortened Solana address ("2Whs…pump") when signed in; '' for agents without one. */
   wallet: string;
@@ -35,6 +37,7 @@ export interface Standing {
   kills: number;
   alive: boolean;
   bot: boolean;
+  wallet: string;
 }
 
 export type GameEvent =
@@ -44,14 +47,13 @@ export type GameEvent =
   | { kind: 'join'; name: string }
   | { kind: 'leave'; name: string }
   | { kind: 'respawn'; name: string; playerId: string }
-  | { kind: 'round_start'; endsAt: number; pot: number }
+  | { kind: 'event_start'; endsAt: number }
   | {
-      kind: 'round_end';
-      winner: Standing | null;
-      standings: Standing[];
-      pot: number;          // gross tickets staked
-      burned: number;       // 20% of the pot, removed forever
-      winnerShare: number;  // pot - burned, credited to the winner
+      kind: 'event_end';
+      survivors: Standing[];      // fish alive at the buzzer (empty = nobody)
+      standings: Standing[];      // full final board
+      prizeFish: number;          // total $FISH pool
+      sharePerSurvivor: number;   // prizeFish / survivors (0 if none)
     };
 
 // ─── client → server ───
@@ -63,7 +65,7 @@ export type ClientMsg =
     }
   | { t: 'input'; x: number; y: number; z: number; bite?: boolean }
   | { t: 'respawn' }
-  /** Claim an on-chain $MYTH ticket purchase (tx signature, base58). */
+  /** Claim an on-chain $FISH ticket purchase (tx signature, base58). */
   | { t: 'deposit'; signature: string }
   | { t: 'chat'; text: string }
   | { t: 'ping'; ts: number };
@@ -71,15 +73,14 @@ export type ClientMsg =
 // ─── server → client ───
 export interface SnapshotMsg {
   t: 'snapshot';
-  now: number;
+  now: number;               // server clock (for countdown sync)
   phase: Phase;
-  phaseEndsAt: number;       // 0 = open-ended (lobby waiting for players)
+  eventStartsAt: number;     // epoch ms — survival window opens
+  eventEndsAt: number;       // epoch ms — buzzer; survivors split the pool
   players: NetPlayer[];
   food: NetFood[];
-  alive: number;             // alive participants in current round
-  needed: number;            // min players to start
-  pot: number;               // tokens staked in the current round
-  graceEndsAt: number;       // >0: one fish left, buy-back deadline (server clock)
+  alive: number;             // fish currently alive in the event
+  prizeFish: number;         // total prize pool in $FISH (base + tickets)
 }
 
 export type ServerMsg =

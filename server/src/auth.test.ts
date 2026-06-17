@@ -63,23 +63,30 @@ describe('Sign-In-With-Solana', () => {
 
 describe('wallet-bound balances', () => {
   const T0 = 1_000_000;
+  // An already-ended world: join never auto-enters, so balances are testable
+  // in isolation (no ticket spent on entry).
+  const endedWorld = () => {
+    const w = new World({ startsAt: T0 - 2000, endsAt: T0 - 1000 });
+    w.tick(T0);
+    return w;
+  };
 
   it('persists a wallet balance across leave/rejoin', () => {
-    const world = new World();
+    const world = endedWorld();
     const w = makeWallet();
     const r1 = world.join('Fish1', '#fff', false, T0, w.pubkey);
     if ('error' in r1) throw new Error(r1.error);
-    r1.player.tokens = 2;            // spent some
+    r1.player.tokens = 2;            // bought some
     world.leave(r1.player.id);
 
     const r2 = world.join('Fish1', '#fff', false, T0 + 1000, w.pubkey);
     if ('error' in r2) throw new Error(r2.error);
-    expect(r2.player.tokens).toBe(2);  // balance survived, no demo reset
+    expect(r2.player.tokens).toBe(2);  // balance survived
     expect(r2.player.wallet).toBe(w.pubkey);
   });
 
   it('starts new wallets at zero tickets and rejects wallet-less humans', () => {
-    const world = new World();
+    const world = endedWorld();
     const w = makeWallet();
     const r = world.join('Fresh', '#fff', false, T0, w.pubkey);
     if ('error' in r) throw new Error(r.error);
@@ -88,7 +95,7 @@ describe('wallet-bound balances', () => {
   });
 
   it('blocks the same wallet from joining twice concurrently', () => {
-    const world = new World();
+    const world = endedWorld();
     const w = makeWallet();
     const r1 = world.join('TabOne', '#fff', false, T0, w.pubkey);
     expect('player' in r1).toBe(true);
@@ -97,7 +104,7 @@ describe('wallet-bound balances', () => {
   });
 
   it('never leaks full wallet addresses in snapshots', () => {
-    const world = new World();
+    const world = endedWorld();
     const w = makeWallet();
     const r = world.join('Whale', '#fff', false, T0, w.pubkey);
     if ('error' in r) throw new Error(r.error);

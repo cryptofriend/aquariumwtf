@@ -25,33 +25,36 @@ export const SPAWN_IMMUNITY_MS = 5000;
 // Movement (halved from the original 14 — deliberate, more tactical pace)
 export const MAX_SPEED = 7;
 
-// Round lifecycle
-export const MIN_PLAYERS = 2;
-export const COUNTDOWN_MS = 10_000;
-export const ROUND_MS = 5 * 60_000;
-export const RESULTS_MS = 15_000;
-export const FRENZY_MS = 60_000;  // final stretch of a round: decay ramps up
+// ─── 24h survival event ───
+// One-time event with a FIXED wall-clock window. The server resolves the
+// actual start/end (env-overridable: EVENT_START_AT / EVENT_END_AT as ISO or
+// epoch-ms); these are the defaults/duration. Set the real launch time when
+// $FISH goes live. The big countdown ticks toward the end; all fish ALIVE at
+// the buzzer split the prize pool equally.
+export const EVENT_DURATION_MS = 24 * 60 * 60 * 1000;  // 24 hours
+export const RESULTS_MS = 60_000;   // how long the 'ended' results screen lingers (cosmetic)
 
 // Agents (HTTP API) are dropped from the tank if silent for this long
 export const AGENT_TIMEOUT_MS = 10_000;
 
-// ─── Token economy (real tickets) ───
-// 1 game ticket = 1 $MYTH sent to the prize-pool wallet, verified on-chain by
-// the server. No ticket → spectator only. The winner takes the round pot
-// (credited as tickets; on-chain payout is the next milestone).
-export const ENTRY_COST_TOKENS = 1;   // charged per round entry AND per re-entry
-export const TICKET_PRICE_MYTH = 21_000;   // $MYTH per ticket ($MYTH has 6 decimals)
-/** Share of every round pot that is burned; the rest goes to the winner. */
-export const POT_BURN_RATE = 0.2;
-/** Tickets burned from a pot (rounds down — small pots favor the winner). */
-export function potBurn(pot: number): number {
-  return Math.floor(pot * POT_BURN_RATE);
-}
-export const MYTH_DECIMALS = 6;
-export const MYTH_MINT = '2WhsBBy6V3LiG42fMqBfK2fbZL677ugkQYXxPx83pump';
+// ─── $FISH economy ───
+// 1 game ticket = TICKET_PRICE_FISH $FISH sent to the prize-pool wallet,
+// verified on-chain. No ticket → spectator only. Every ticket's $FISH is
+// added to the prize pool on top of the 100M base; survivors split it.
+//
+// ⚠️ PLACEHOLDERS until the $FISH token launches — set FISH_MINT (and confirm
+// FISH_DECIMALS) and ticket purchases go live. Until then, on-chain buys can't
+// verify; gameplay is testable via the server's DEV_ALLOW_NO_WALLET flag.
+export const ENTRY_COST_TOKENS = 1;          // tickets charged per entry / re-entry
+export const TICKET_PRICE_FISH = 21_000;     // $FISH per ticket
+export const FISH_DECIMALS = 6;              // TODO: confirm against the real mint
+export const FISH_MINT = 'FISH_MINT_ADDRESS_TBD';
+export const BASE_PRIZE_FISH = 100_000_000;  // 100M $FISH sponsored base prize
 export const PRIZE_POOL_WALLET = 'BUZkgjP1QjYd9YJcUNhpFXFvQBPiqwGMaZNBecuGvR4M';
-/** When one fish remains, dead players get this long to buy back in before the round ends. */
-export const RESPAWN_GRACE_MS = 10_000;
+/** Total prize $FISH = base + every ticket staked into the event. */
+export function prizePoolFish(ticketsStaked: number): number {
+  return BASE_PRIZE_FISH + ticketsStaked * TICKET_PRICE_FISH;
+}
 
 /** Visual scale of a fish — also drives reach/speed so size matters. */
 export function scaleFor(weight: number): number {
@@ -83,12 +86,10 @@ export function biteDamage(attackerWeight: number, victimWeight: number): number
 }
 
 /**
- * Passive mass decay per second. Above 3kg fish slowly shrink (anti-camping);
- * during the end-of-round frenzy everyone shrinks toward 1kg proportionally,
- * which pressures the field without reordering the standings.
+ * Passive mass decay per second. Above 3kg fish slowly shrink (anti-camping) —
+ * size is instrumental (survive/kill) in the survival event, not the win
+ * condition, so a gentle ceiling pressure is all that's needed.
  */
-export function decayPerSecond(weight: number, frenzy: boolean): number {
-  let d = weight > 3 ? (weight - 3) * 0.002 : 0;
-  if (frenzy) d += Math.max(0, weight - 1) * 0.01;
-  return d;
+export function decayPerSecond(weight: number): number {
+  return weight > 3 ? (weight - 3) * 0.002 : 0;
 }

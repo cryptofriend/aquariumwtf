@@ -3,16 +3,15 @@ interface Props {
   kills: number;
   weight: number;
   tokens: number;
-  graceMsLeft: number;   // >0 → round ends soon unless someone buys back in
   onRespawn: () => void;
   onSpectate: () => void;
 }
 
 /**
- * Shown when you die mid-round. Re-enter for 1 ticket (as many times as your
- * balance allows) or spectate until the next round.
+ * Shown when you die during the event. Re-enter for 1 ticket to keep
+ * surviving (as many times as your balance allows) or sit out as a spectator.
  */
-export default function DeathScreen({ killerName, kills, weight, tokens, graceMsLeft, onRespawn, onSpectate }: Props) {
+export default function DeathScreen({ killerName, kills, weight, tokens, onRespawn, onSpectate }: Props) {
   const canRespawn = tokens >= 1;
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center pointer-events-auto"
@@ -25,17 +24,14 @@ export default function DeathScreen({ killerName, kills, weight, tokens, graceMs
         </p>
       )}
       <p className="text-zinc-500 font-mono text-sm mb-1">
-        Kills this round: <span className="text-zinc-300 font-bold">{kills}</span>
+        Kills: <span className="text-zinc-300 font-bold">{kills}</span>
       </p>
-      <p className="text-zinc-500 font-mono text-sm mb-4">
+      <p className="text-zinc-500 font-mono text-sm mb-1">
         Final weight: <span className="text-amber-400 font-bold">{weight.toFixed(1)}kg</span>
       </p>
-
-      {graceMsLeft > 0 && (
-        <p className="text-red-300 font-mono text-sm mb-3 animate-pulse">
-          ⏳ Round ends in {Math.ceil(graceMsLeft / 1000)}s unless someone buys back in!
-        </p>
-      )}
+      <p className="text-red-300 font-mono text-sm mb-4">
+        You're out of the prize split — re-enter to get back in the hunt.
+      </p>
 
       <div className="flex gap-4 mt-2">
         <button
@@ -54,8 +50,8 @@ export default function DeathScreen({ killerName, kills, weight, tokens, graceMs
       </div>
       <p className="font-mono text-xs mt-3 text-zinc-500">
         {canRespawn
-          ? `${tokens} ticket${tokens === 1 ? '' : 's'} left — every re-entry grows the pot`
-          : 'Out of tickets — buy more on the entry screen or win a pot'}
+          ? `${tokens} ticket${tokens === 1 ? '' : 's'} left — every re-entry also grows the prize pool`
+          : 'Out of tickets — buy more on the entry screen to rejoin'}
       </p>
     </div>
   );

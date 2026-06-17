@@ -20,7 +20,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
-import { SOLANA_RPC } from "./solana/myth";
+import { SOLANA_RPC } from "./solana/fish";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
 

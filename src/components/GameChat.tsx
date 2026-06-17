@@ -35,12 +35,12 @@ export default function GameChat({ embedded = false, fillParent = false }: Props
       case 'join': sys(`🐟 ${e.name} joined the aquarium`); break;
       case 'leave': sys(`💨 ${e.name} left`); break;
       case 'kill': sys(`💀 ${e.attacker} killed ${e.victim}!`); break;
-      case 'respawn': sys(`🪙 ${e.name} bought back in (+1 to the pot)`); break;
+      case 'respawn': sys(`🎟 ${e.name} dived in (+1 ticket to the pool)`); break;
       case 'bite': sys(`🦷 ${e.attacker} bit ${e.victim} for ${e.damage.toFixed(1)}kg`); break;
-      case 'round_start': sys('⚔️ Round started — eat or get eaten!'); break;
-      case 'round_end': sys(e.winner
-        ? `🏆 ${e.winner.name} won at ${e.winner.weight.toFixed(1)}kg — takes ${e.winnerShare}🎟${e.burned > 0 ? ` · ${e.burned}🎟 burned 🔥` : ''}`
-        : '🏁 Round over'); break;
+      case 'event_start': sys('⚔️ Survival begins — last fish swimming wins!'); break;
+      case 'event_end': sys(e.survivors.length
+        ? `🏁 Event over — ${e.survivors.length} survivor${e.survivors.length === 1 ? '' : 's'} split the pool!`
+        : '🏁 Event over — no survivors'); break;
     }
   }), [push]);
 

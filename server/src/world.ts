@@ -9,12 +9,15 @@
 import { randomUUID } from 'node:crypto';
 import {
   TANK_HALF, INITIAL_WEIGHT, MIN_WEIGHT, FOOD_WEIGHT, MAX_FOOD, FOOD_SPAWN_MS,
-  BITE_COOLDOWN_MS, SPAWN_IMMUNITY_MS, MIN_PLAYERS, COUNTDOWN_MS, ROUND_MS,
-  RESULTS_MS, FRENZY_MS, AGENT_TIMEOUT_MS, ENTRY_COST_TOKENS,
-  RESPAWN_GRACE_MS, potBurn,
+  BITE_COOLDOWN_MS, SPAWN_IMMUNITY_MS, EVENT_DURATION_MS, AGENT_TIMEOUT_MS,
+  ENTRY_COST_TOKENS, prizePoolFish,
   speedFor, eatRadiusFor, biteRangeFor, biteDamage, decayPerSecond,
 } from '../../shared/constants';
 import type { GameEvent, NetFood, NetPlayer, Phase, SnapshotMsg, Standing } from '../../shared/protocol';
+
+function shortWallet(w: string | null): string {
+  return w ? `${w.slice(0, 4)}…${w.slice(-4)}` : '';
+}
 
 export interface Vec3 { x: number; y: number; z: number }
 
@@ -71,27 +74,28 @@ function randomPos(): Vec3 {
 export class World {
   players = new Map<string, Player>();
   food: Food[] = [];
-  phase: Phase = 'lobby';
-  phaseEndsAt = 0;
-  roundStartedAt = 0;
-  /** How many fish the current round STARTED with (leavers don't shrink it). */
-  roundStartedCount = 0;
-  /** Tokens staked in the current round (entries + re-entries). Winner takes it. */
-  pot = 0;
-  /** While one fish remains: deadline for buy-backs before the round ends (0 = inactive). */
-  graceEndsAt = 0;
-  /** Recent round winners — the new all-time ranks source (server lifetime). */
-  hallOfFame: { name: string; wallet: string; weight: number; kills: number; pot: number; burned: number; at: number }[] = [];
-  /** Lifetime tickets burned (20% of every pot) — to be burned on-chain. */
-  totalBurned = 0;
+  phase: Phase = 'upcoming';
+  /** Fixed wall-clock survival window. */
+  readonly eventStartsAt: number;
+  readonly eventEndsAt: number;
+  /** Tickets staked into the event (entries + re-entries) — grows the prize. */
+  ticketsStaked = 0;
+  /** Final survivors of the event (the ranks board). Empty until the buzzer. */
+  hallOfFame: { name: string; wallet: string; weight: number; kills: number; share: number; at: number }[] = [];
 
   private events: GameEvent[] = [];
   private lastTickAt = 0;
   private lastFoodSpawnAt = 0;
   private foodSeq = 0;
   private secretIndex = new Map<string, string>(); // secret → player id
-  /** Token balances of signed-in wallets, kept across disconnects. */
+  /** Ticket balances of signed-in wallets, kept across disconnects. */
   private walletBalances = new Map<string, number>();
+
+  constructor(opts: { startsAt?: number; endsAt?: number } = {}) {
+    const start = opts.startsAt ?? Date.now();
+    this.eventStartsAt = start;
+    this.eventEndsAt = opts.endsAt ?? start + EVENT_DURATION_MS;
+  }
 
   // ─── joining / leaving ───────────────────────────────────────────
 
@@ -126,11 +130,11 @@ export class World {
       weight: INITIAL_WEIGHT,
       maxWeight: INITIAL_WEIGHT,
       kills: 0,
-      // Tickets are bought on-chain (1 $MYTH each). Wallets resume their
-      // saved balance; everyone else starts at zero and spectates.
+      // Tickets are bought on-chain ($FISH). Wallets resume their saved
+      // balance; everyone else starts at zero and spectates.
       tokens: wallet ? this.walletBalances.get(wallet) ?? 0 : 0,
       dead: false,
-      spectator: this.phase === 'round',  // mid-round joiners spectate or buy in
+      spectator: true,        // a watching ghost until they spend a ticket
       participant: false,
       immuneUntil: now + SPAWN_IMMUNITY_MS,
       lastBiteAt: 0,
@@ -143,6 +147,10 @@ export class World {
     this.players.set(player.id, player);
     if (player.secret) this.secretIndex.set(player.secret, player.id);
     this.emit({ kind: 'join', name: player.name });
+    // Holding a ticket? Drop straight into the tank (matches "Enter the Tank").
+    if (this.phase !== 'ended' && player.tokens >= ENTRY_COST_TOKENS) {
+      this.enter(player.id, now);
+    }
     return { player };
   }
 
@@ -246,7 +254,8 @@ export class World {
       t: 'snapshot',
       now,
       phase: this.phase,
-      phaseEndsAt: this.phaseEndsAt,
+      eventStartsAt: this.eventStartsAt,
+      eventEndsAt: this.eventEndsAt,
       players: [...this.players.values()].map((p): NetPlayer => ({
         id: p.id,
         name: p.name,
@@ -259,90 +268,29 @@ export class World {
         immune: p.immuneUntil > now,
         bot: p.isBot,
         tokens: p.tokens,
-        wallet: p.wallet ? `${p.wallet.slice(0, 4)}…${p.wallet.slice(-4)}` : '',
+        wallet: shortWallet(p.wallet),
       })),
       food: this.food,
       alive: this.aliveParticipants().length,
-      needed: MIN_PLAYERS,
-      pot: this.pot,
-      graceEndsAt: this.graceEndsAt,
+      prizeFish: prizePoolFish(this.ticketsStaked),
     };
   }
 
-  // ─── round lifecycle ──────────────────────────────────────────────
+  // ─── survival-event lifecycle (driven by the wall clock) ───────────
 
   private updatePhase(now: number) {
-    // Only fish that can pay the entry fee count toward starting a round
-    const eligible = [...this.players.values()].filter(
-      (p) => !p.spectator && p.tokens >= ENTRY_COST_TOKENS,
-    );
-
-    switch (this.phase) {
-      case 'lobby':
-        if (eligible.length >= MIN_PLAYERS) {
-          this.phase = 'countdown';
-          this.phaseEndsAt = now + COUNTDOWN_MS;
-        }
-        break;
-
-      case 'countdown':
-        if (eligible.length < MIN_PLAYERS) {
-          this.phase = 'lobby';
-          this.phaseEndsAt = 0;
-        } else if (now >= this.phaseEndsAt) {
-          this.startRound(now);
-        }
-        break;
-
-      case 'round': {
-        const alive = this.aliveParticipants();
-        const lastFish = this.roundStartedCount >= MIN_PLAYERS && alive.length <= 1;
-        if (lastFish) {
-          // Hold the round open briefly so the dead can buy back in —
-          // unless nobody left can afford a re-entry.
-          const someoneCanRebuy = [...this.players.values()].some(
-            (p) => (p.dead || p.spectator) && p.tokens >= ENTRY_COST_TOKENS,
-          );
-          if (!someoneCanRebuy) {
-            this.endRound(now);
-            break;
-          }
-          if (this.graceEndsAt === 0) this.graceEndsAt = now + RESPAWN_GRACE_MS;
-        } else {
-          this.graceEndsAt = 0;
-        }
-        if (now >= this.phaseEndsAt || (this.graceEndsAt > 0 && now >= this.graceEndsAt)) {
-          this.endRound(now);
-        }
-        break;
-      }
-
-      case 'results':
-        if (now >= this.phaseEndsAt) {
-          this.toLobby(now);
-        }
-        break;
-    }
+    const next: Phase = now < this.eventStartsAt ? 'upcoming' : now < this.eventEndsAt ? 'live' : 'ended';
+    if (next === this.phase) return;
+    const prev = this.phase;
+    this.phase = next;
+    if (next === 'live' && prev === 'upcoming') this.beginLive(now);
+    if (next === 'ended') this.endEvent(now);
   }
 
-  private startRound(now: number) {
-    this.phase = 'round';
-    this.roundStartedAt = now;
-    this.phaseEndsAt = now + ROUND_MS;
-    this.food = [];
-    this.pot = 0;
+  /** Combat opens: give every fish already in the tank a fresh, fair start. */
+  private beginLive(now: number) {
     for (const p of this.players.values()) {
-      // Entry fee: 1 ticket per round. No ticket → spectate until you buy
-      // another or win a pot.
-      if (p.tokens >= ENTRY_COST_TOKENS) {
-        p.tokens -= ENTRY_COST_TOKENS;
-        this.pot += ENTRY_COST_TOKENS;
-        p.participant = true;
-        p.spectator = false;
-      } else {
-        p.participant = false;
-        p.spectator = true;
-      }
+      if (!p.participant) continue;
       p.dead = false;
       p.weight = INITIAL_WEIGHT;
       p.maxWeight = INITIAL_WEIGHT;
@@ -355,23 +303,24 @@ export class World {
       p.biteQueued = null;
       p.pendingBites = [];
     }
-    this.roundStartedCount = [...this.players.values()].filter((p) => p.participant).length;
-    this.emit({ kind: 'round_start', endsAt: this.phaseEndsAt, pot: this.pot });
+    this.emit({ kind: 'event_start', endsAt: this.eventEndsAt });
   }
 
   /**
-   * Mid-round (re-)entry for 1 token: dead fish buy back in, spectators buy
-   * in late. As many re-entries as the balance allows.
+   * Spend a ticket to (re-)enter the tank. Handles first entry, late join,
+   * and buy-back after death. As many re-entries as the balance allows.
    */
-  respawn(id: string, now: number): { ok: true; tokensLeft: number } | { ok: false; reason: string } {
+  enter(id: string, now: number): { ok: true; tokensLeft: number } | { ok: false; reason: string } {
     const p = this.players.get(id);
     if (!p) return { ok: false, reason: 'Unknown player' };
-    if (this.phase !== 'round') return { ok: false, reason: 'No active round — you join the next one automatically' };
-    if (p.participant && !p.dead) return { ok: false, reason: 'You are still alive' };
-    if (p.tokens < ENTRY_COST_TOKENS) return { ok: false, reason: 'Out of tokens' };
+    if (this.phase === 'ended') return { ok: false, reason: 'The event has ended' };
+    if (p.participant && !p.dead) return { ok: false, reason: 'You are already in the tank' };
+    if (p.tokens < ENTRY_COST_TOKENS) return { ok: false, reason: 'You need a ticket to enter' };
 
     p.tokens -= ENTRY_COST_TOKENS;
-    this.pot += ENTRY_COST_TOKENS;
+    this.ticketsStaked += ENTRY_COST_TOKENS;   // grows the prize pool
+    if (p.wallet) this.walletBalances.set(p.wallet, p.tokens);
+
     p.participant = true;
     p.spectator = false;
     p.dead = false;
@@ -385,74 +334,36 @@ export class World {
     p.immuneUntil = now + SPAWN_IMMUNITY_MS;
     p.lastBiteAt = 0;
     p.biteQueued = null;
-    this.roundStartedCount++;   // keeps the early-end check correct
     this.emit({ kind: 'respawn', name: p.name, playerId: p.id });
     return { ok: true, tokensLeft: p.tokens };
   }
 
-  private endRound(now: number) {
-    const participants = [...this.players.values()].filter((p) => p.participant);
-    const standings: Standing[] = participants
-      .map((p) => ({
-        name: p.name,
-        weight: round2(p.weight),
-        kills: p.kills,
-        alive: !p.dead,
-        bot: p.isBot,
-      }))
-      .sort((a, b) =>
-        Number(b.alive) - Number(a.alive) || b.weight - a.weight || b.kills - a.kills,
-      );
-    const winner = standings[0] ?? null;
-
-    // 20% of the pot is burned; the winner takes the remaining 80%
-    // (credited as tickets — the matching $MYTH burn happens on-chain in
-    // the payout milestone; totalBurned tracks the obligation).
-    const burned = winner ? potBurn(this.pot) : 0;
-    const winnerShare = this.pot - burned;
-    if (winner) {
-      const winnerPlayer = participants.find((p) => p.name === winner.name);
-      if (winnerPlayer) {
-        winnerPlayer.tokens += winnerShare;
-        this.totalBurned += burned;
-        if (winnerPlayer.wallet) this.walletBalances.set(winnerPlayer.wallet, winnerPlayer.tokens);
-        this.hallOfFame.unshift({
-          name: winner.name,
-          wallet: winnerPlayer.wallet ? `${winnerPlayer.wallet.slice(0, 4)}…${winnerPlayer.wallet.slice(-4)}` : '',
-          weight: winner.weight,
-          kills: winner.kills,
-          pot: winnerShare,
-          burned,
-          at: now,
-        });
-        if (this.hallOfFame.length > 50) this.hallOfFame.pop();
-      }
-    }
-
-    this.phase = 'results';
-    this.phaseEndsAt = now + RESULTS_MS;
-    this.graceEndsAt = 0;
-    this.emit({ kind: 'round_end', winner, standings, pot: this.pot, burned, winnerShare });
+  /** Re-entry after death / late buy-in — same as enter. */
+  respawn(id: string, now: number) {
+    return this.enter(id, now);
   }
 
-  private toLobby(now: number) {
-    this.phase = 'lobby';
-    this.phaseEndsAt = 0;
-    this.food = [];
-    this.pot = 0;
-    this.graceEndsAt = 0;
-    for (const p of this.players.values()) {
-      p.participant = false;
-      p.spectator = false;
-      p.dead = false;
-      p.weight = INITIAL_WEIGHT;
-      p.maxWeight = INITIAL_WEIGHT;
-      p.kills = 0;
-      p.killerName = '';
-      p.pos = randomPos();
-      p.immuneUntil = now + SPAWN_IMMUNITY_MS;
-      p.biteQueued = null;
-    }
+  /** The buzzer: all fish ALIVE in the event split the prize equally. */
+  private endEvent(now: number) {
+    const participants = [...this.players.values()].filter((p) => p.participant);
+    const survivors = participants.filter((p) => !p.dead);
+    const prizeFish = prizePoolFish(this.ticketsStaked);
+    const sharePerSurvivor = survivors.length ? Math.floor(prizeFish / survivors.length) : 0;
+
+    const toStanding = (p: Player): Standing => ({
+      name: p.name, weight: round2(p.weight), kills: p.kills,
+      alive: !p.dead, bot: p.isBot, wallet: shortWallet(p.wallet),
+    });
+    const standings = participants
+      .map(toStanding)
+      .sort((a, b) => Number(b.alive) - Number(a.alive) || b.kills - a.kills || b.weight - a.weight);
+
+    this.hallOfFame = survivors
+      .slice()
+      .sort((a, b) => b.kills - a.kills || b.weight - a.weight)
+      .map((p) => ({ name: p.name, wallet: shortWallet(p.wallet), weight: round2(p.weight), kills: p.kills, share: sharePerSurvivor, at: now }));
+
+    this.emit({ kind: 'event_end', survivors: survivors.map(toStanding), standings, prizeFish, sharePerSurvivor });
   }
 
   private aliveParticipants(): Player[] {
@@ -494,14 +405,13 @@ export class World {
   }
 
   private applyDecay(now: number, dt: number) {
-    if (this.phase !== 'round') return;
-    const frenzy = this.phaseEndsAt - now < FRENZY_MS;
+    if (this.phase !== 'live') return;
     for (const p of this.players.values()) {
       if (p.dead || !p.participant) continue;
       // Floor at 1kg, but never RAISE weight — a bitten fish below 1kg must
       // stay bitten, otherwise bites against small fish print free mass.
       const floor = Math.min(p.weight, INITIAL_WEIGHT);
-      p.weight = Math.max(floor, p.weight - decayPerSecond(p.weight, frenzy) * dt);
+      p.weight = Math.max(floor, p.weight - decayPerSecond(p.weight) * dt);
     }
   }
 
@@ -517,8 +427,8 @@ export class World {
   /** All bite rules live here. Returns a result for the agent API. */
   performBite(attacker: Player, targetId: string | null, now: number):
     { ok: false; reason: string } | { ok: true; victim: Player; damage: number; killed: boolean } {
-    if (this.phase !== 'round') return { ok: false, reason: 'No active round — bites only count during a round' };
-    if (attacker.dead || attacker.spectator) return { ok: false, reason: 'You are not in the round' };
+    if (this.phase !== 'live') return { ok: false, reason: 'Combat is not open yet' };
+    if (attacker.dead || attacker.spectator) return { ok: false, reason: 'You are not in the event' };
     if (now - attacker.lastBiteAt < BITE_COOLDOWN_MS) return { ok: false, reason: 'Bite on cooldown' };
 
     const range = biteRangeFor(attacker.weight);
@@ -591,7 +501,7 @@ export class World {
   }
 
   private spawnFood(now: number) {
-    if (this.phase === 'results') return;
+    if (this.phase !== 'live') return;
     if (this.food.length >= MAX_FOOD) return;
     if (now - this.lastFoodSpawnAt < FOOD_SPAWN_MS) return;
     this.lastFoodSpawnAt = now;

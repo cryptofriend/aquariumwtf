@@ -1,19 +1,23 @@
 import { useEffect, useState } from 'react';
-import { TANK_HALF, BITE_COOLDOWN_MS, TICKET_PRICE_MYTH } from '../game/constants';
+import { TANK_HALF, BITE_COOLDOWN_MS, TICKET_PRICE_FISH } from '../game/constants';
 import { biteRequest } from './TankScene';
 import { Move, ArrowUpDown, Bug, Info, X, Smartphone } from 'lucide-react';
 import { useIsMobile } from '../hooks/use-mobile';
 import VirtualJoystick from './VirtualJoystick';
 import ChatLeaderboardPanel from './ChatLeaderboardPanel';
 import DeathScreen from './DeathScreen';
-import { net, self, phaseMsLeft, on, sendRespawn } from '../net/gameClient';
-import { fetchMythPriceUsd } from '../solana/myth';
+import { net, self, eventMsLeft, startMsLeft, on, sendRespawn } from '../net/gameClient';
+import { fetchFishPriceUsd } from '../solana/fish';
 import type { Standing } from '../../shared/protocol';
 import { toast } from 'sonner';
 
-function fmtTime(ms: number) {
-  const s = Math.max(0, Math.ceil(ms / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+/** HH:MM:SS for the long survival countdown. */
+function fmtClock(ms: number) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
 function Minimap() {
@@ -86,106 +90,101 @@ function Minimap() {
   );
 }
 
-/** Big prize-pool readout: live pot in $MYTH and USD. */
+function fmtFish(n: number) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })}M`;
+  if (n >= 1_000) return `${(n / 1_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}K`;
+  return n.toLocaleString();
+}
+
+/** Big prize-pool readout: total $FISH pool (+ USD once $FISH is listed). */
 function PrizePoolBanner() {
   const [price, setPrice] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    const load = () => fetchMythPriceUsd().then((p) => { if (!cancelled) setPrice(p); });
+    const load = () => fetchFishPriceUsd().then((p) => { if (!cancelled) setPrice(p); });
     load();
     const id = setInterval(load, 60_000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 
-  const myth = net.pot * TICKET_PRICE_MYTH;
-  const usd = price !== null ? myth * price : null;
+  const fish = net.prizeFish;
+  const usd = price !== null ? fish * price : null;
 
   return (
     <div className="bg-black/75 backdrop-blur-sm border-2 border-amber-400/70 rounded-xl px-6 py-2 text-center shadow-lg shadow-amber-900/30 pointer-events-none">
       <div className="text-amber-400/90 text-[10px] font-bold uppercase tracking-[0.2em]">🏆 Prize Pool</div>
       <div className="text-amber-300 text-2xl font-bold leading-tight">
-        {myth.toLocaleString()} <span className="text-base">$MYTH</span>
+        {fmtFish(fish)} <span className="text-base">$FISH</span>
         {usd !== null && (
           <span className="text-emerald-300 text-lg font-bold ml-2">
             (${usd >= 100 ? Math.round(usd).toLocaleString() : usd.toFixed(2)})
           </span>
         )}
       </div>
-      <div className="text-zinc-500 text-[9px]">winner takes 80% · 20% burned 🔥</div>
+      <div className="text-zinc-500 text-[9px]">all survivors split the pool 🐟</div>
     </div>
   );
 }
 
-/** Top-center banner: lobby / countdown / round timer / frenzy warning. */
-function RoundBanner() {
-  const msLeft = phaseMsLeft();
-  const playing = [...net.players.values()].filter((p) => !p.spectator).length;
-
-  let content: JSX.Element;
-  switch (net.phase) {
-    case 'lobby':
-      content = (
-        <span className="text-cyan-300">
-          🐟 Warm-up — waiting for fish ({playing}/{net.needed})
-        </span>
-      );
-      break;
-    case 'countdown':
-      content = (
-        <span className="text-amber-300 text-lg font-bold animate-pulse">
-          ⚔️ Round starts in {Math.ceil(msLeft / 1000)}…
-        </span>
-      );
-      break;
-    case 'round': {
-      const frenzy = msLeft < 60_000;
-      content = (
-        <span className={frenzy ? 'text-red-400 font-bold animate-pulse' : 'text-zinc-200'}>
-          {frenzy ? '🔥 FRENZY ' : '⏱ '}{fmtTime(msLeft)} · {net.alive} alive
-        </span>
-      );
-      break;
-    }
-    case 'results':
-      content = <span className="text-emerald-300">🏆 Round over — next one in {Math.ceil(msLeft / 1000)}s</span>;
-      break;
+/** The BIG survival countdown — the centerpiece of the screen. */
+function CountdownBanner() {
+  let label: string;
+  let ms: number;
+  let danger = false;
+  if (net.phase === 'upcoming') {
+    label = 'EVENT STARTS IN';
+    ms = startMsLeft();
+  } else if (net.phase === 'live') {
+    label = `SURVIVE · ${net.alive} ALIVE`;
+    ms = eventMsLeft();
+    danger = ms < 60 * 60_000; // final hour
+  } else {
+    label = 'EVENT OVER';
+    ms = 0;
   }
 
   return (
-    <div className="bg-black/70 backdrop-blur-sm border border-zinc-700 rounded-lg px-5 py-2 font-mono text-sm text-center pointer-events-none">
-      {content}
+    <div className="bg-black/75 backdrop-blur-sm border border-zinc-700 rounded-lg px-6 py-1.5 text-center pointer-events-none">
+      <div className={`text-[10px] font-bold uppercase tracking-[0.2em] ${danger ? 'text-red-400' : 'text-cyan-300'}`}>{label}</div>
+      <div className={`font-mono font-bold tabular-nums leading-none ${danger ? 'text-red-400 animate-pulse' : 'text-zinc-100'} text-3xl`}>
+        {net.phase === 'ended' ? '00:00:00' : fmtClock(ms)}
+      </div>
     </div>
   );
 }
 
-function ResultsOverlay({ standings, pot, burned }: { standings: Standing[]; pot: number; burned: number }) {
-  const winner = standings[0];
+function EventEndedOverlay({ survivors, prizeFish, share, meName }: {
+  survivors: Standing[]; prizeFish: number; share: number; meName: string;
+}) {
+  const iSurvived = survivors.some((s) => s.name === meName);
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-auto bg-black/60 backdrop-blur-sm">
-      <div className="bg-zinc-950/95 border border-zinc-700 rounded-2xl p-8 font-mono text-center min-w-[320px]">
-        <div className="text-6xl mb-3">🏆</div>
-        {winner ? (
+    <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-auto bg-black/70 backdrop-blur-sm">
+      <div className="bg-zinc-950/95 border border-zinc-700 rounded-2xl p-8 font-mono text-center min-w-[340px] max-w-[90vw]">
+        <div className="text-6xl mb-3">🏁</div>
+        <h2 className="text-2xl font-bold text-amber-300 mb-1">Event over</h2>
+        {survivors.length > 0 ? (
           <>
-            <h2 className="text-2xl font-bold text-amber-300 mb-1">{winner.name} wins!</h2>
-            <p className="text-amber-200 text-lg font-bold mb-1">+{pot - burned} 🎟 — 80% of the pot</p>
-            {burned > 0 && <p className="text-orange-400 text-sm font-bold mb-1">🔥 {burned} 🎟 burned forever</p>}
-            <p className="text-zinc-400 text-sm mb-5">{winner.weight.toFixed(1)}kg · {winner.kills} kills</p>
+            <p className="text-zinc-300 text-sm mb-1">
+              {survivors.length} survivor{survivors.length === 1 ? '' : 's'} split <span className="text-amber-300 font-bold">{fmtFish(prizeFish)} $FISH</span>
+            </p>
+            <p className="text-emerald-300 text-lg font-bold mb-1">{fmtFish(share)} $FISH each</p>
+            {iSurvived && <p className="text-emerald-400 text-sm font-bold mb-3">🎉 You survived — your share is {fmtFish(share)} $FISH!</p>}
           </>
         ) : (
-          <h2 className="text-2xl font-bold text-zinc-300 mb-5">Round over</h2>
+          <p className="text-zinc-400 text-sm mb-3">No survivors — the {fmtFish(prizeFish)} $FISH pool goes unclaimed.</p>
         )}
-        <div className="space-y-1 text-left mb-5">
-          {standings.slice(0, 8).map((s, i) => (
-            <div key={s.name} className={`flex items-center gap-2 text-xs ${i === 0 ? 'text-amber-300' : s.alive ? 'text-zinc-300' : 'text-zinc-600 line-through'}`}>
+        <div className="space-y-1 text-left mb-2">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">🐟 Survivors</div>
+          {survivors.slice(0, 10).map((s, i) => (
+            <div key={s.name} className={`flex items-center gap-2 text-xs ${s.name === meName ? 'text-amber-300 font-bold' : 'text-zinc-300'}`}>
               <span className="w-5 text-zinc-500">{i + 1}.</span>
-              <span className="flex-1 truncate">{s.name}{s.bot ? ' 🤖' : ''}</span>
-              <span>{s.weight.toFixed(1)}kg</span>
+              <span className="flex-1 truncate">{s.name}{s.bot ? ' 🤖' : ''}{s.wallet ? ` ◎${s.wallet}` : ''}</span>
               <span className="text-red-400">{s.kills}🗡</span>
             </div>
           ))}
+          {survivors.length === 0 && <div className="text-zinc-600 text-xs">— none —</div>}
         </div>
-        <p className="text-zinc-500 text-xs animate-pulse">Next round starting in {Math.ceil(phaseMsLeft() / 1000)}s…</p>
       </div>
     </div>
   );
@@ -194,13 +193,13 @@ function ResultsOverlay({ standings, pot, burned }: { standings: Standing[]; pot
 /** Highlighted banner for watch-only spectators. */
 function SpectatorBanner({ onExit }: { onExit: () => void }) {
   return (
-    <div className="absolute top-36 left-1/2 -translate-x-1/2 pointer-events-auto">
+    <div className="absolute top-44 left-1/2 -translate-x-1/2 pointer-events-auto">
       <div className="bg-cyan-500/15 backdrop-blur-sm border-2 border-cyan-400 rounded-lg px-5 py-2 font-mono text-center shadow-lg shadow-cyan-900/40">
         <span className="text-cyan-300 text-xs font-bold uppercase tracking-wider">
-          👀 Spectating the aquarium
+          👀 Spectating the survival event
         </span>
         <div className="text-zinc-300 text-[10px] mt-0.5">
-          Want in? <button onClick={onExit} className="underline text-amber-300 hover:text-amber-200">Buy a ticket ({TICKET_PRICE_MYTH.toLocaleString()} $MYTH) on the entry screen</button>
+          Want in? <button onClick={onExit} className="underline text-amber-300 hover:text-amber-200">Buy a ticket ({TICKET_PRICE_FISH.toLocaleString()} $FISH) on the entry screen</button>
         </div>
       </div>
     </div>
@@ -216,9 +215,7 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
   const [, setTick] = useState(0);
   const [showRules, setShowRules] = useState(false);
   const [showMobileControls, setShowMobileControls] = useState(true);
-  const [standings, setStandings] = useState<Standing[] | null>(null);
-  const [lastPot, setLastPot] = useState(0);
-  const [lastBurned, setLastBurned] = useState(0);
+  const [end, setEnd] = useState<{ survivors: Standing[]; prizeFish: number; share: number } | null>(null);
   const [killerName, setKillerName] = useState('');
   const [dismissedDeath, setDismissedDeath] = useState(false);
   const isMobile = useIsMobile();
@@ -243,11 +240,11 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
   }), []);
 
   useEffect(() => on('event', (e) => {
-    if (e.kind === 'round_end') { setStandings(e.standings); setLastPot(e.pot); setLastBurned(e.burned); }
-    if (e.kind === 'round_start') { setStandings(null); setKillerName(''); setDismissedDeath(false); }
+    if (e.kind === 'event_end') { setEnd({ survivors: e.survivors, prizeFish: e.prizeFish, share: e.sharePerSurvivor }); }
+    if (e.kind === 'event_start') { setEnd(null); setKillerName(''); setDismissedDeath(false); }
     if (e.kind === 'kill' && e.victimId === net.selfId) { setKillerName(e.attacker); setDismissedDeath(false); }
     if (e.kind === 'respawn' && e.playerId === net.selfId) {
-      toast.success('🪙 Re-entered the round — fresh fish, 5s protection');
+      toast.success('🎟 In the tank — fresh fish, 5s protection. Survive!');
     }
     // Personal toasts
     if (e.kind === 'bite' && e.victimId === net.selfId) {
@@ -262,7 +259,7 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
   }), []);
 
   const me = self();
-  const inRound = net.phase === 'round';
+  const inRound = net.phase === 'live';
 
   const liveEntries = [...net.players.values()]
     .filter((p) => !p.spectator)
@@ -276,14 +273,14 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
     <div className="fixed inset-0 z-40 pointer-events-none font-mono">
       <div className="absolute top-3 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5">
         <PrizePoolBanner />
-        <RoundBanner />
+        <CountdownBanner />
       </div>
       {spectateOnly && <SpectatorBanner onExit={onExit} />}
 
       {/* Live standings */}
       <div className="absolute top-4 left-4 pointer-events-auto bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg p-3 min-w-[200px]">
         <div className="text-purple-400 text-xs font-bold mb-2 uppercase tracking-wider">
-          {inRound ? '🔴 Eat or Get Eaten' : '🐟 In the Tank'}
+          {inRound ? '🩸 Survivors' : '🐟 In the Tank'}
         </div>
         {liveEntries.slice(0, 8).map((e, i) => (
           <div key={i} className={`flex items-center gap-2 text-xs py-0.5 ${e.dead ? 'opacity-40 line-through' : ''} ${e.isMe ? 'bg-white/10 rounded px-1 -mx-1' : ''}`}>
@@ -330,14 +327,14 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
         {me?.spectator && (
           <div className="bg-cyan-500/15 border border-cyan-500/40 rounded-lg px-3 py-1.5 flex flex-col items-end gap-1.5">
             <span className="text-cyan-300 text-[10px] font-bold uppercase tracking-wider">
-              {me.tokens >= 1 ? '👻 Spectating — you swim next round' : '🎟 No tickets — buy one on the entry screen'}
+              {me.tokens >= 1 ? '👻 Spectating — jump in to start surviving' : '🎟 No tickets — buy one on the entry screen'}
             </span>
-            {inRound && me.tokens >= 1 && (
+            {net.phase !== 'ended' && me.tokens >= 1 && (
               <button
                 onClick={() => sendRespawn()}
                 className="px-3 py-1.5 rounded-md bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold transition-colors"
               >
-                🎟 Buy in now — 1 ticket
+                🎟 Dive in — 1 ticket
               </button>
             )}
           </div>
@@ -388,30 +385,28 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
           <div className="mb-3 p-2 rounded-md bg-amber-500/10 border border-amber-500/30">
             <div className="text-amber-300 text-[10px] font-bold uppercase tracking-wider mb-1">🏆 Goal</div>
             <p className="text-zinc-200 text-[11px] leading-snug">
-              Rounds last 5 minutes. The <span className="text-amber-300 font-bold">biggest fish at the buzzer takes the pot</span>.
+              One <span className="text-amber-300 font-bold">24-hour survival event</span>. Every fish <span className="text-amber-300 font-bold">still alive at the buzzer splits the prize pool equally</span>.
             </p>
           </div>
 
           <div className="mb-3 p-2 rounded-md bg-yellow-500/10 border border-yellow-500/30">
-            <div className="text-yellow-300 text-[10px] font-bold uppercase tracking-wider mb-1">🎟 Tickets</div>
+            <div className="text-yellow-300 text-[10px] font-bold uppercase tracking-wider mb-1">🎟 Tickets &amp; prize</div>
             <ul className="text-zinc-300 text-[11px] space-y-1 list-disc list-inside">
-              <li>1 ticket = <span className="text-yellow-300">{TICKET_PRICE_MYTH.toLocaleString()} $MYTH</span>, bought on the entry screen</li>
-              <li>Entering a round costs <span className="text-yellow-300">1 ticket</span> — it goes into the pot</li>
+              <li>1 ticket = <span className="text-yellow-300">{TICKET_PRICE_FISH.toLocaleString()} $FISH</span>, bought on the entry screen</li>
+              <li>Each ticket's $FISH is <span className="text-amber-300">added to the prize pool</span> (on top of the 100M base)</li>
               <li>Died? <span className="text-yellow-300">Re-enter for 1 ticket</span> — as many times as you can afford</li>
-              <li>The winner takes <span className="text-amber-300 font-bold">80% of the pot</span> · <span className="text-orange-400 font-bold">20% is burned 🔥</span></li>
               <li>👀 <span className="text-zinc-400">No ticket? Spectate for free</span></li>
             </ul>
           </div>
 
           <div className="mb-3">
-            <div className="text-emerald-300 text-[10px] font-bold uppercase tracking-wider mb-1">📈 How to grow</div>
+            <div className="text-emerald-300 text-[10px] font-bold uppercase tracking-wider mb-1">🩸 How to survive</div>
             <ul className="text-zinc-300 text-[11px] space-y-1 list-disc list-inside">
-              <li>Swim into <span className="text-emerald-300">🌿 food orbs</span> (+0.5kg, automatic)</li>
-              <li><span className="text-red-400">Bite</span> to steal <span className="text-amber-400">10% of your weight</span> from a victim (max half of theirs per bite)</li>
+              <li>Eat <span className="text-emerald-300">🌿 food</span> (+0.5kg) to grow — bigger = harder to kill</li>
+              <li><span className="text-red-400">Bite</span> rivals to <span className="text-amber-400">thin the survivor pool</span> — fewer survivors = a bigger share for you</li>
               <li>Fresh spawns have <span className="text-emerald-300">5s 🛡 protection</span> — attacking ends yours</li>
-              <li>Big fish swim slower and slowly shrink — keep hunting</li>
-              <li>In the final minute (<span className="text-red-400">🔥 frenzy</span>) everyone shrinks — defend your lead</li>
-              <li>If a bite drops you below 0.3kg you're <span className="text-red-400">dead</span> — you spectate until next round</li>
+              <li>If a bite drops you below 0.3kg you <span className="text-red-400">die</span> — re-enter for a ticket to stay in the hunt</li>
+              <li>Be <span className="text-amber-300">alive at the buzzer</span> to claim your split 🏆</li>
             </ul>
           </div>
 
@@ -470,32 +465,33 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
 
       <ChatLeaderboardPanel />
 
-      {/* Death overlay — re-enter for 1 token, or spectate; results replace it */}
-      {me?.dead && inRound && !dismissedDeath && (
+      {/* Death overlay — re-enter for a ticket to keep surviving, or spectate */}
+      {me?.dead && inRound && !dismissedDeath && !end && (
         <DeathScreen
           killerName={killerName || '...'}
           kills={me.kills}
           weight={me.weight}
           tokens={me.tokens}
-          graceMsLeft={net.graceEndsAt > 0 ? Math.max(0, net.graceEndsAt - (Date.now() + net.clockSkew)) : 0}
           onRespawn={() => sendRespawn()}
           onSpectate={() => setDismissedDeath(true)}
         />
       )}
 
       {/* Dismissed the death screen but still want back in? Floating buy-back. */}
-      {me?.dead && inRound && dismissedDeath && me.tokens >= 1 && (
+      {me?.dead && inRound && dismissedDeath && me.tokens >= 1 && !end && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 pointer-events-auto">
           <button
             onClick={() => sendRespawn()}
             className="px-5 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-mono font-bold text-sm shadow-lg shadow-red-900/50 transition-colors"
           >
-            🪙 Re-enter — 1 token ({me.tokens} left)
+            🎟 Re-enter — 1 ticket ({me.tokens} left)
           </button>
         </div>
       )}
 
-      {net.phase === 'results' && standings && <ResultsOverlay standings={standings} pot={lastPot} burned={lastBurned} />}
+      {net.phase === 'ended' && end && (
+        <EventEndedOverlay survivors={end.survivors} prizeFish={end.prizeFish} share={end.share} meName={me?.name ?? ''} />
+      )}
     </div>
   );
 }

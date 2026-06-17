@@ -24,15 +24,14 @@ export interface NetState {
   /** Base58 wallet bound to this session ('' = guest). */
   selfWallet: string;
   phase: Phase;
-  phaseEndsAt: number;
+  eventStartsAt: number;
+  eventEndsAt: number;
   /** offset so that serverTime ≈ Date.now() + clockSkew */
   clockSkew: number;
   players: Map<string, RenderPlayer>;
   food: NetFood[];
   alive: number;
-  needed: number;
-  pot: number;
-  graceEndsAt: number;
+  prizeFish: number;
   lastBiteSentAt: number;
   /** Last server error worth surfacing (e.g. respawn rejected). */
   lastError: string;
@@ -45,15 +44,14 @@ export const net: NetState = {
   selfName: '',
   selfColor: '#70a1ff',
   selfWallet: '',
-  phase: 'lobby',
-  phaseEndsAt: 0,
+  phase: 'upcoming',
+  eventStartsAt: 0,
+  eventEndsAt: 0,
   clockSkew: 0,
   players: new Map(),
   food: [],
   alive: 0,
-  needed: 2,
-  pot: 0,
-  graceEndsAt: 0,
+  prizeFish: 0,
   lastBiteSentAt: 0,
   lastError: '',
 };
@@ -62,10 +60,19 @@ export function self(): RenderPlayer | null {
   return net.selfId ? net.players.get(net.selfId) ?? null : null;
 }
 
-/** Server clock → ms remaining for the current phase. */
-export function phaseMsLeft(): number {
-  if (net.phaseEndsAt <= 0) return 0;
-  return Math.max(0, net.phaseEndsAt - (Date.now() + net.clockSkew));
+/** Server clock now (Date.now adjusted by measured skew). */
+export function serverNow(): number {
+  return Date.now() + net.clockSkew;
+}
+
+/** Ms until the survival buzzer (0 outside the live window). */
+export function eventMsLeft(): number {
+  return net.eventEndsAt > 0 ? Math.max(0, net.eventEndsAt - serverNow()) : 0;
+}
+
+/** Ms until the event starts (0 once started). */
+export function startMsLeft(): number {
+  return net.eventStartsAt > 0 ? Math.max(0, net.eventStartsAt - serverNow()) : 0;
 }
 
 export interface ChatMessage { from: string; color: string; text: string; ts: number; system?: boolean }
@@ -165,12 +172,11 @@ function handleMessage(msg: ServerMsg) {
     case 'snapshot': {
       net.clockSkew = msg.now - Date.now();
       net.phase = msg.phase;
-      net.phaseEndsAt = msg.phaseEndsAt;
+      net.eventStartsAt = msg.eventStartsAt;
+      net.eventEndsAt = msg.eventEndsAt;
       net.food = msg.food;
       net.alive = msg.alive;
-      net.needed = msg.needed;
-      net.pot = msg.pot;
-      net.graceEndsAt = msg.graceEndsAt;
+      net.prizeFish = msg.prizeFish;
       const seen = new Set<string>();
       for (const p of msg.players) {
         seen.add(p.id);

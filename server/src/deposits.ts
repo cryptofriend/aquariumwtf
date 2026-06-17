@@ -1,23 +1,23 @@
 /**
- * On-chain ticket purchases. A ticket = TICKET_PRICE_MYTH $MYTH transferred
+ * On-chain ticket purchases. A ticket = TICKET_PRICE_FISH $FISH transferred
  * to the prize-pool wallet. The client (or an agent) submits the transaction
  * SIGNATURE; this module verifies the transfer on-chain and reports who paid
  * and how many tickets they bought.
  *
  * Security model:
- *  - Credit goes to the wallet that SENT the $MYTH (read from the tx itself),
+ *  - Credit goes to the wallet that SENT the $FISH (read from the tx itself),
  *    so a stolen/observed signature can never credit anyone else.
  *  - Each signature is single-use (in-memory used-set).
  *  - Only recent transactions count (MAX_AGE), which bounds the replay window
  *    after a server restart to "reclaim what you paid for".
  */
 import {
-  MYTH_MINT, PRIZE_POOL_WALLET, TICKET_PRICE_MYTH, MYTH_DECIMALS,
+  FISH_MINT, PRIZE_POOL_WALLET, TICKET_PRICE_FISH, FISH_DECIMALS,
 } from '../../shared/constants';
 
 const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const MAX_AGE_MS = 60 * 60 * 1000; // accept txs up to 1h old
-const TICKET_RAW = BigInt(TICKET_PRICE_MYTH) * BigInt(10 ** MYTH_DECIMALS);
+const TICKET_RAW = BigInt(TICKET_PRICE_FISH) * BigInt(10 ** FISH_DECIMALS);
 
 const usedSignatures = new Set<string>();
 
@@ -77,14 +77,14 @@ export async function verifyDeposit(
   const post: TokenBalance[] = tx.meta?.postTokenBalances ?? [];
 
   const balanceOf = (list: TokenBalance[], index: number) => {
-    const e = list.find((b) => b.accountIndex === index && b.mint === MYTH_MINT);
+    const e = list.find((b) => b.accountIndex === index && b.mint === FISH_MINT);
     return e ? BigInt(e.uiTokenAmount.amount) : 0n;
   };
 
-  // How much $MYTH did the prize pool receive, and who paid it?
+  // How much $FISH did the prize pool receive, and who paid it?
   let received = 0n;
   let sender: string | null = null;
-  const indices = new Set([...pre, ...post].filter((b) => b.mint === MYTH_MINT).map((b) => b.accountIndex));
+  const indices = new Set([...pre, ...post].filter((b) => b.mint === FISH_MINT).map((b) => b.accountIndex));
   for (const idx of indices) {
     const owner = (post.find((b) => b.accountIndex === idx)?.owner) ?? (pre.find((b) => b.accountIndex === idx)?.owner);
     const delta = balanceOf(post, idx) - balanceOf(pre, idx);
@@ -93,7 +93,7 @@ export async function verifyDeposit(
   }
 
   if (received < TICKET_RAW) {
-    return { ok: false, reason: `No ticket payment found — send at least ${TICKET_PRICE_MYTH} $MYTH to the prize pool` };
+    return { ok: false, reason: `No ticket payment found — send at least ${TICKET_PRICE_FISH} $FISH to the prize pool` };
   }
   if (!sender) {
     return { ok: false, reason: 'Could not determine the paying wallet from the transaction' };

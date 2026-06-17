@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { verifyDeposit, RpcFetch } from './deposits';
-import { MYTH_MINT, PRIZE_POOL_WALLET, TICKET_PRICE_MYTH, MYTH_DECIMALS } from '../../shared/constants';
+import { FISH_MINT, PRIZE_POOL_WALLET, TICKET_PRICE_FISH, FISH_DECIMALS } from '../../shared/constants';
 
 const NOW = 1_750_000_000_000;
 const BUYER = 'BuyerWa11et1111111111111111111111111111111';
-const TICKET_RAW = BigInt(TICKET_PRICE_MYTH) * BigInt(10 ** MYTH_DECIMALS);
+const TICKET_RAW = BigInt(TICKET_PRICE_FISH) * BigInt(10 ** FISH_DECIMALS);
 
 let sigCounter = 0;
 function freshSig() {
@@ -35,12 +35,12 @@ function fakeTx(opts: {
     meta: {
       err,
       preTokenBalances: [
-        { accountIndex: 1, mint: MYTH_MINT, owner: from, uiTokenAmount: { amount: String(TICKET_RAW * 10n) } },
-        { accountIndex: 2, mint: MYTH_MINT, owner: to, uiTokenAmount: { amount: '0' } },
+        { accountIndex: 1, mint: FISH_MINT, owner: from, uiTokenAmount: { amount: String(TICKET_RAW * 10n) } },
+        { accountIndex: 2, mint: FISH_MINT, owner: to, uiTokenAmount: { amount: '0' } },
       ],
       postTokenBalances: [
-        { accountIndex: 1, mint: MYTH_MINT, owner: from, uiTokenAmount: { amount: String(TICKET_RAW * 10n - amountRaw) } },
-        { accountIndex: 2, mint: MYTH_MINT, owner: to, uiTokenAmount: { amount: String(amountRaw) } },
+        { accountIndex: 1, mint: FISH_MINT, owner: from, uiTokenAmount: { amount: String(TICKET_RAW * 10n - amountRaw) } },
+        { accountIndex: 2, mint: FISH_MINT, owner: to, uiTokenAmount: { amount: String(amountRaw) } },
       ],
     },
   };
@@ -48,7 +48,7 @@ function fakeTx(opts: {
 }
 
 describe('on-chain ticket verification', () => {
-  it('accepts a valid 1 $MYTH transfer and credits the sender', async () => {
+  it('accepts a valid 1 $FISH transfer and credits the sender', async () => {
     const r = await verifyDeposit(freshSig(), fakeTx({}), NOW);
     expect(r).toEqual({ ok: true, wallet: BUYER, tickets: 1 });
   });

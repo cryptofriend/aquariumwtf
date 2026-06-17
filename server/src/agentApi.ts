@@ -10,8 +10,8 @@
  */
 import {
   TANK_HALF, INITIAL_WEIGHT, MIN_WEIGHT, FOOD_WEIGHT, BITE_COOLDOWN_MS,
-  SPAWN_IMMUNITY_MS, AGENT_TIMEOUT_MS, ROUND_MS,
-  TICKET_PRICE_MYTH, MYTH_MINT, PRIZE_POOL_WALLET,
+  SPAWN_IMMUNITY_MS, AGENT_TIMEOUT_MS,
+  TICKET_PRICE_FISH, FISH_MINT, PRIZE_POOL_WALLET, BASE_PRIZE_FISH, prizePoolFish,
   eatRadiusFor, biteRangeFor,
 } from '../../shared/constants';
 import { verifyLogin } from './auth';
@@ -29,9 +29,9 @@ export const GAME_RULES = {
   bite_cooldown_ms: BITE_COOLDOWN_MS,
   spawn_immunity_ms: SPAWN_IMMUNITY_MS,
   death_condition: `a bite leaving you below ${MIN_WEIGHT}kg kills you`,
-  size_speed: 'bigger fish swim slower; mass above 3kg slowly decays',
-  rounds: `play happens in timed rounds (${ROUND_MS / 60000} min). Biggest fish at the buzzer wins the POT. Joining mid-round makes you a spectator until the next round starts (or use "respawn" to buy in immediately).`,
-  tickets: `YOU NEED TICKETS TO PLAY. 1 ticket = ${TICKET_PRICE_MYTH} $MYTH (mint ${MYTH_MINT}) sent to the prize pool wallet ${PRIZE_POOL_WALLET}. After the transfer confirms, call {"action":"deposit","signature":"<tx sig>"} — the ticket is credited to the SENDING wallet, so join with that wallet's auth (see "join"). Every round entry costs 1 ticket (auto-deducted at round start) and each mid-round "respawn" costs 1 ticket. All stakes form the round pot; the WINNER TAKES 80% and 20% IS BURNED forever. At 0 tickets you spectate.`,
+  size_speed: 'bigger fish swim slower; mass above 3kg slowly decays. Size is instrumental (helps you survive and kill), NOT the win condition.',
+  format: 'ONE 24-HOUR SURVIVAL EVENT. Stay ALIVE until the buzzer. Every fish still alive at the end splits the prize pool EQUALLY — so killing rivals shrinks the survivor pool and grows your share. phase: "upcoming" (not started) | "live" (survive!) | "ended". phase_ends_in_ms counts down to the buzzer during "live".',
+  tickets: `YOU NEED A TICKET TO ENTER. 1 ticket = ${TICKET_PRICE_FISH} $FISH (mint ${FISH_MINT}) sent to the prize pool wallet ${PRIZE_POOL_WALLET}. After the transfer confirms, call {"action":"deposit","signature":"<tx sig>"} — credited to the SENDING wallet, so join with that wallet's auth. Entering costs 1 ticket; if you die, "respawn" for another. Every staked ticket's $FISH is added to the prize pool on top of the ${BASE_PRIZE_FISH.toLocaleString()} $FISH base. At 0 tickets you spectate.`,
   wallet_auth: 'to claim a wallet\'s tickets, join with {"wallet":"<pubkey>","nonce":"<from GET /auth/nonce?wallet=...>","signature":"<base58 ed25519 signature of the nonce message>"}. Sign with the wallet\'s keypair (e.g. tweetnacl.sign.detached).',
   inactivity_timeout_ms: AGENT_TIMEOUT_MS,
   recommended_move_interval_ms: 500,
@@ -56,7 +56,10 @@ function agentState(p: Player, world: World, now: number) {
     bite_range: round2(biteRangeFor(p.weight)),
     eat_radius: round2(eatRadiusFor(p.weight)),
     phase: world.phase,
-    phase_ends_in_ms: world.phaseEndsAt > 0 ? Math.max(0, world.phaseEndsAt - now) : null,
+    // ms until the relevant deadline: event start (upcoming) or buzzer (live)
+    phase_ends_in_ms: world.phase === 'upcoming' ? Math.max(0, world.eventStartsAt - now)
+      : world.phase === 'live' ? Math.max(0, world.eventEndsAt - now)
+      : 0,
   };
 }
 
@@ -214,7 +217,10 @@ export async function handleAgentAction(body: Record<string, unknown>, deps: Age
           ok: true,
           server_time: new Date(now).toISOString(),
           phase: world.phase,
-          phase_ends_in_ms: world.phaseEndsAt > 0 ? Math.max(0, world.phaseEndsAt - now) : null,
+          event_ends_in_ms: world.phase === 'live' ? Math.max(0, world.eventEndsAt - now)
+            : world.phase === 'upcoming' ? Math.max(0, world.eventStartsAt - now) : 0,
+          prize_pool_fish: prizePoolFish(world.ticketsStaked),
+          alive: world.snapshot(now).alive,
           self: p ? agentState(p, world, now) : null,
           players,
           food,

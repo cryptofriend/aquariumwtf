@@ -9,7 +9,7 @@
  */
 import { createServer } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { TANK_HALF, TICK_MS, SNAPSHOT_MS, ROUND_MS } from '../../shared/constants';
+import { TANK_HALF, TICK_MS, SNAPSHOT_MS, EVENT_DURATION_MS } from '../../shared/constants';
 import type { ClientMsg, ServerMsg } from '../../shared/protocol';
 import { World } from './world';
 import { handleAgentAction } from './agentApi';
@@ -21,7 +21,18 @@ const PORT = Number(process.env.PORT) || 8787;
 const CHAT_LIMIT_MS = 1500;
 const MAX_CHAT_LOG = 200;
 
-const world = new World();
+// Fixed survival window. Set EVENT_START_AT / EVENT_END_AT (epoch-ms or ISO)
+// to pin the real launch; defaults to a 24h window starting at server boot.
+function parseTime(v: string | undefined): number | undefined {
+  if (!v) return undefined;
+  const n = Number(v);
+  if (Number.isFinite(n)) return n;
+  const d = Date.parse(v);
+  return Number.isFinite(d) ? d : undefined;
+}
+const startsAt = parseTime(process.env.EVENT_START_AT) ?? Date.now();
+const endsAt = parseTime(process.env.EVENT_END_AT) ?? startsAt + EVENT_DURATION_MS;
+const world = new World({ startsAt, endsAt });
 const sockets = new Map<string, WebSocket>();        // player id → socket
 const chatLog: { from: string; color: string; text: string; ts: number }[] = [];
 const lastChatAt = new Map<string, number>();
@@ -311,9 +322,12 @@ setInterval(() => {
 
   for (const e of world.drainEvents()) {
     broadcast({ t: 'event', e });
-    if (e.kind === 'round_end') {
-      void persistRoundResults(e.standings, Math.round(ROUND_MS / 1000));
-      console.log(`[round] winner: ${e.winner?.name ?? 'none'} (${e.winner?.weight ?? 0}kg) — ${e.standings.length} fish`);
+    if (e.kind === 'event_end') {
+      void persistRoundResults(e.survivors, Math.round(EVENT_DURATION_MS / 1000));
+      console.log(`[event] ENDED — ${e.survivors.length} survivor(s) split ${e.prizeFish.toLocaleString()} $FISH (${e.sharePerSurvivor.toLocaleString()} each)`);
+    }
+    if (e.kind === 'event_start') {
+      console.log(`[event] LIVE — survival begins, ends at ${new Date(e.endsAt).toISOString()}`);
     }
   }
 
@@ -325,5 +339,6 @@ setInterval(() => {
 
 httpServer.listen(PORT, () => {
   console.log(`[aquarium] game server on :${PORT} — ws path /ws, agent API POST /agent`);
+  console.log(`[aquarium] survival event: ${new Date(startsAt).toISOString()} → ${new Date(endsAt).toISOString()}`);
   console.log(`[aquarium] leaderboard persistence: ${leaderboardEnabled ? 'ON' : 'off (set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY)'}`);
 });
