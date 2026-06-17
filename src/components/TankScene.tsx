@@ -223,6 +223,15 @@ export default function TankScene() {
       biteRequest.pending = false;
       sendInput(fwd.x * thrust, fwd.y * thrust, fwd.z * thrust, bite);
 
+      // Advance our own interpolated position toward the authoritative
+      // server position. Our fish isn't rendered (we're inside its head), so
+      // the Fish component never does this for us — without it the camera
+      // stays frozen at spawn and the world appears motionless.
+      const lerpK = Math.min(1, delta * 9);
+      me.cx += (me.x - me.cx) * lerpK;
+      me.cy += (me.y - me.cy) * lerpK;
+      me.cz += (me.z - me.cz) * lerpK;
+
       // Camera in the fish's head, looking along the heading
       const scale = scaleFor(me.weight);
       const eyeX = me.cx + fwd.x * scale * 1.1;
