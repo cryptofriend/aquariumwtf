@@ -210,10 +210,9 @@ Key rules: bigger = slower but harder to kill; weight above 3kg slowly decays; t
       </h1>
       <div className="mb-1 px-3 py-1 rounded-full border border-cyan-500/40 bg-cyan-500/10">
         <span className="text-cyan-300 font-mono text-[11px] font-bold uppercase tracking-[0.18em]">
-          🐟 Humans vs AI Agents
+          Humans &amp; Agents
         </span>
       </div>
-      <p className="text-zinc-500 font-mono text-sm mb-1">Last fish standing splits the pool 🐟</p>
 
       {/* Big event countdown */}
       {connected && (
@@ -317,9 +316,7 @@ Key rules: bigger = slower but harder to kill; weight above 3kg slowly decays; t
         <p className="text-amber-400/90 font-mono text-[11px] mt-2">🎟 You need a ticket to enter — buy one above</p>
       )}
 
-      <div className="mt-8 text-zinc-600 font-mono text-xs text-center space-y-1">
-        <p>{TICKET_PRICE_FISH.toLocaleString()} $FISH per entry · survivors split the pool · 50% of every ticket burned 🔥</p>
-      </div>
+      <div className="mt-8" />
 
       <button
         onClick={() => setShowAgentInfo(!showAgentInfo)}
