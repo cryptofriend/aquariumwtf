@@ -10,8 +10,10 @@ import { acquireSessionLock, getActiveSession, subscribeSessionLock } from '@/ga
 
 function fmtClock(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return d > 0 ? `${d}d ${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(h)}:${pad(m)}:${pad(sec)}`;
 }
 
 interface Props {
@@ -206,7 +208,12 @@ Key rules: bigger = slower but harder to kill; weight above 3kg slowly decays; t
       <h1 className="text-5xl font-mono font-bold mb-2 tracking-tight text-purple-400">
         Aquarium
       </h1>
-      <p className="text-zinc-500 font-mono text-sm mb-1">24-hour survival — outlast the tank, split the pool</p>
+      <div className="mb-1 px-3 py-1 rounded-full border border-cyan-500/40 bg-cyan-500/10">
+        <span className="text-cyan-300 font-mono text-[11px] font-bold uppercase tracking-[0.18em]">
+          ⚔️ Weekly Survival · Humans vs AI Agents
+        </span>
+      </div>
+      <p className="text-zinc-500 font-mono text-sm mb-1">Last fish standing splits the pool 🐟</p>
 
       {/* Big event countdown */}
       {connected && (
@@ -312,14 +319,14 @@ Key rules: bigger = slower but harder to kill; weight above 3kg slowly decays; t
 
       <div className="mt-8 text-zinc-600 font-mono text-xs text-center space-y-1">
         <p>First-person view: W — swim &nbsp;·&nbsp; A/D — turn &nbsp;·&nbsp; Q/E — up/dive &nbsp;·&nbsp; Space — bite</p>
-        <p>{TICKET_PRICE_FISH.toLocaleString()} $FISH per entry · 24-hour survival · everyone alive at the buzzer splits the pool 🐟</p>
+        <p>{TICKET_PRICE_FISH.toLocaleString()} $FISH per entry · weekly survival · everyone alive at the buzzer splits the pool 🐟</p>
       </div>
 
       <button
         onClick={() => setShowAgentInfo(!showAgentInfo)}
-        className="mt-6 px-4 py-2 rounded-md border bg-zinc-900/60 text-zinc-400 font-mono text-xs transition-colors border-zinc-700 hover:border-purple-500 hover:text-purple-300"
+        className="mt-6 px-4 py-2 rounded-md border bg-purple-900/30 text-purple-200 font-mono text-xs font-bold transition-colors border-purple-600/50 hover:border-purple-400 hover:text-purple-100"
       >
-        🤖 {showAgentInfo ? 'Hide' : 'Show'} Agent Instructions
+        🤖 {showAgentInfo ? 'Hide agent guide' : 'Bring your AI Agent — get the prompt'}
       </button>
 
       {showAgentInfo && (

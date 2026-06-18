@@ -131,8 +131,10 @@ export class World {
       maxWeight: INITIAL_WEIGHT,
       kills: 0,
       // Tickets are bought on-chain ($FISH). Wallets resume their saved
-      // balance; everyone else starts at zero and spectates.
-      tokens: wallet ? this.walletBalances.get(wallet) ?? 0 : 0,
+      // balance; everyone else starts at zero and spectates. DEV bypass funds
+      // wallet-less testers so gameplay is playable without the token.
+      tokens: wallet ? this.walletBalances.get(wallet) ?? 0
+        : (!isBot && process.env.DEV_ALLOW_NO_WALLET === '1' ? 3 : 0),
       dead: false,
       spectator: true,        // a watching ghost until they spend a ticket
       participant: false,

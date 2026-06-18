@@ -6,18 +6,21 @@ import { useIsMobile } from '../hooks/use-mobile';
 import VirtualJoystick from './VirtualJoystick';
 import ChatLeaderboardPanel from './ChatLeaderboardPanel';
 import DeathScreen from './DeathScreen';
+import ShareCard from './ShareCard';
 import { net, self, eventMsLeft, startMsLeft, on, sendRespawn } from '../net/gameClient';
 import { fetchFishPriceUsd } from '../solana/fish';
 import type { Standing } from '../../shared/protocol';
 import { toast } from 'sonner';
 
-/** HH:MM:SS for the long survival countdown. */
+/** Dd HH:MM:SS for the long survival countdown (days shown when ≥24h). */
 function fmtClock(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(s / 3600);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return d > 0 ? `${d}d ${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(h)}:${pad(m)}:${pad(sec)}`;
 }
 
 function Minimap() {
@@ -218,6 +221,9 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
   const [end, setEnd] = useState<{ survivors: Standing[]; prizeFish: number; share: number } | null>(null);
   const [killerName, setKillerName] = useState('');
   const [dismissedDeath, setDismissedDeath] = useState(false);
+  // Show the share-to-X card once, the moment our fish enters the tank.
+  const [shareShown, setShareShown] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -260,6 +266,14 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
 
   const me = self();
   const inRound = net.phase === 'live';
+
+  // First time our fish is actually in the tank (not a watcher) → share card.
+  useEffect(() => {
+    if (!spectateOnly && !shareShown && me && !me.spectator) {
+      setShareShown(true);
+      setShowShare(true);
+    }
+  }, [me?.spectator, spectateOnly, shareShown]);
 
   const liveEntries = [...net.players.values()]
     .filter((p) => !p.spectator)
@@ -491,6 +505,10 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
 
       {net.phase === 'ended' && end && (
         <EventEndedOverlay survivors={end.survivors} prizeFish={end.prizeFish} share={end.share} meName={me?.name ?? ''} />
+      )}
+
+      {showShare && me && !end && (
+        <ShareCard name={me.name} color={me.color} prizeFish={net.prizeFish} onClose={() => setShowShare(false)} />
       )}
     </div>
   );
