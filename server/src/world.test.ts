@@ -121,21 +121,26 @@ describe('prize pool', () => {
   });
 });
 
-describe('survival payout', () => {
-  it('splits the pool equally among fish alive at the buzzer', () => {
+describe('survival payout (poker-style)', () => {
+  it('ranks survivors by kills and pays top-heavy, summing to the pool', () => {
     const world = freshWorld();
     const a = joinPlayer(world, 'A');
     const b = joinPlayer(world, 'B');
     const c = joinPlayer(world, 'C');
-    c.dead = true;                    // C does not survive
+    c.dead = true;            // C does not survive — out of the money
+    a.kills = 3;              // A out-fought B
+    b.kills = 1;
     world.drainEvents();
     world.tick(END + 1);
     const end = world.drainEvents().find((e) => e.kind === 'event_end');
     if (!end || end.kind !== 'event_end') throw new Error('no event_end');
-    expect(end.survivors.map((s) => s.name).sort()).toEqual(['A', 'B']);
-    const pool = prizePoolFish(3);    // 3 entries staked
-    expect(end.prizeFish).toBe(pool);
-    expect(end.sharePerSurvivor).toBe(Math.floor(pool / 2));
+
+    expect(end.survivors.map((s) => s.name)).toEqual(['A', 'B']);   // ranked by kills
+    expect(end.prizeFish).toBe(prizePoolFish(3));
+    const [a1, b1] = end.survivors;
+    expect((a1.share ?? 0)).toBeGreaterThan(b1.share ?? 0);          // top gets more
+    expect((b1.share ?? 0)).toBeGreaterThan(0);                      // but everyone is paid
+    expect((a1.share ?? 0) + (b1.share ?? 0)).toBe(end.prizeFish);   // sums to pool
   });
 
   it('pays nobody when there are no survivors (pool unclaimed)', () => {
@@ -148,10 +153,21 @@ describe('survival payout', () => {
     const end = world.drainEvents().find((e) => e.kind === 'event_end');
     if (!end || end.kind !== 'event_end') throw new Error('no event_end');
     expect(end.survivors).toHaveLength(0);
-    expect(end.sharePerSurvivor).toBe(0);
   });
 
-  it('records survivors in the hall of fame', () => {
+  it('a lone survivor takes the whole pool', () => {
+    const world = freshWorld();
+    const a = joinPlayer(world, 'A');
+    const b = joinPlayer(world, 'B');
+    b.dead = true;
+    world.tick(END + 1);
+    const end = world.drainEvents().find((e) => e.kind === 'event_end');
+    if (!end || end.kind !== 'event_end') throw new Error('no event_end');
+    expect(end.survivors).toHaveLength(1);
+    expect(end.survivors[0].share).toBe(end.prizeFish);
+  });
+
+  it('records ranked survivors with shares in the hall of fame', () => {
     const world = freshWorld();
     joinPlayer(world, 'A');
     joinPlayer(world, 'B');

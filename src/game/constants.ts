@@ -11,6 +11,7 @@ export {
   SPAWN_IMMUNITY_MS,
   TICKET_PRICE_FISH,
   BASE_PRIZE_FISH,
+  payoutSplit,
   scaleFor,
   biteRangeFor,
   eatRadiusFor,

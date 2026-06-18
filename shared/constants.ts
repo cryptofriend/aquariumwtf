@@ -56,6 +56,27 @@ export function prizePoolFish(ticketsStaked: number): number {
   return BASE_PRIZE_FISH + ticketsStaked * TICKET_PRICE_FISH;
 }
 
+/**
+ * Poker-tournament-style payout: survivors are ranked (by kills, then size)
+ * and paid on a steep geometric curve — every survivor is in the money, but
+ * the top take the lion's share. Each place gets PAYOUT_DECAY× the place
+ * above it; ratio ~0.7 closely mirrors a standard final-table structure
+ * (1st ≈ 30%, 2nd ≈ 22%, 3rd ≈ 16%…).
+ *
+ * Returns integer $FISH per placement (index 0 = 1st), summing exactly to
+ * `pool` (rounding remainder goes to 1st).
+ */
+export const PAYOUT_DECAY = 0.7;
+export function payoutSplit(pool: number, places: number): number[] {
+  if (places <= 0 || pool <= 0) return [];
+  const weights = Array.from({ length: places }, (_, i) => Math.pow(PAYOUT_DECAY, i));
+  const total = weights.reduce((a, b) => a + b, 0);
+  const shares = weights.map((w) => Math.floor((pool * w) / total));
+  const remainder = pool - shares.reduce((a, b) => a + b, 0);
+  shares[0] += remainder;
+  return shares;
+}
+
 /** Visual scale of a fish — also drives reach/speed so size matters. */
 export function scaleFor(weight: number): number {
   return 0.6 + Math.log2(Math.max(1, weight)) * 0.25;

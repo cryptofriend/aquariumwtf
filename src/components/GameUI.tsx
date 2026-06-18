@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { TANK_HALF, BITE_COOLDOWN_MS, TICKET_PRICE_FISH } from '../game/constants';
+import { TANK_HALF, BITE_COOLDOWN_MS, TICKET_PRICE_FISH, payoutSplit } from '../game/constants';
 import { biteRequest } from './TankScene';
 import { Move, ArrowUpDown, Bug, Info, X, Smartphone } from 'lucide-react';
 import { useIsMobile } from '../hooks/use-mobile';
@@ -157,33 +157,31 @@ function CountdownBanner() {
   );
 }
 
-function EventEndedOverlay({ survivors, prizeFish, share, meName }: {
-  survivors: Standing[]; prizeFish: number; share: number; meName: string;
+function EventEndedOverlay({ survivors, prizeFish, meName }: {
+  survivors: Standing[]; prizeFish: number; meName: string;
 }) {
-  const iSurvived = survivors.some((s) => s.name === meName);
+  const mine = survivors.find((s) => s.name === meName);
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-auto bg-black/70 backdrop-blur-sm">
       <div className="bg-zinc-950/95 border border-zinc-700 rounded-2xl p-8 font-mono text-center min-w-[340px] max-w-[90vw]">
         <div className="text-6xl mb-3">🏁</div>
         <h2 className="text-2xl font-bold text-amber-300 mb-1">Event over</h2>
         {survivors.length > 0 ? (
-          <>
-            <p className="text-zinc-300 text-sm mb-1">
-              {survivors.length} survivor{survivors.length === 1 ? '' : 's'} split <span className="text-amber-300 font-bold">{fmtFish(prizeFish)} $FISH</span>
-            </p>
-            <p className="text-emerald-300 text-lg font-bold mb-1">{fmtFish(share)} $FISH each</p>
-            {iSurvived && <p className="text-emerald-400 text-sm font-bold mb-3">🎉 You survived — your share is {fmtFish(share)} $FISH!</p>}
-          </>
+          <p className="text-zinc-300 text-sm mb-1">
+            {survivors.length} survivor{survivors.length === 1 ? '' : 's'} split <span className="text-amber-300 font-bold">{fmtFish(prizeFish)} $FISH</span>
+          </p>
         ) : (
           <p className="text-zinc-400 text-sm mb-3">No survivors — the {fmtFish(prizeFish)} $FISH pool goes unclaimed.</p>
         )}
+        {mine && <p className="text-emerald-400 text-base font-bold mb-3">🎉 You placed #{survivors.indexOf(mine) + 1} — won {fmtFish(mine.share ?? 0)} $FISH!</p>}
         <div className="space-y-1 text-left mb-2">
-          <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">🐟 Survivors</div>
-          {survivors.slice(0, 10).map((s, i) => (
-            <div key={s.name} className={`flex items-center gap-2 text-xs ${s.name === meName ? 'text-amber-300 font-bold' : 'text-zinc-300'}`}>
-              <span className="w-5 text-zinc-500">{i + 1}.</span>
-              <span className="flex-1 truncate">{s.name}{s.bot ? ' 🤖' : ''}{s.wallet ? ` ◎${s.wallet}` : ''}</span>
-              <span className="text-red-400">{s.kills}🗡</span>
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">🏆 Payouts</div>
+          {survivors.slice(0, 12).map((s, i) => (
+            <div key={s.name} className={`flex items-center gap-2 text-xs ${s.name === meName ? 'text-amber-300 font-bold' : i === 0 ? 'text-amber-200' : 'text-zinc-300'}`}>
+              <span className="w-5 text-zinc-500">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</span>
+              <span className="flex-1 truncate">{s.name}{s.bot ? ' 🤖' : ''}</span>
+              <span className="text-red-400 w-10 text-right">{s.kills}🗡</span>
+              <span className="text-emerald-300 w-20 text-right">{fmtFish(s.share ?? 0)}</span>
             </div>
           ))}
           {survivors.length === 0 && <div className="text-zinc-600 text-xs">— none —</div>}
@@ -218,7 +216,7 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
   const [, setTick] = useState(0);
   const [showRules, setShowRules] = useState(false);
   const [showMobileControls, setShowMobileControls] = useState(true);
-  const [end, setEnd] = useState<{ survivors: Standing[]; prizeFish: number; share: number } | null>(null);
+  const [end, setEnd] = useState<{ survivors: Standing[]; prizeFish: number } | null>(null);
   const [killerName, setKillerName] = useState('');
   const [dismissedDeath, setDismissedDeath] = useState(false);
   // Show the share-to-X card once, the moment our fish enters the tank.
@@ -246,7 +244,7 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
   }), []);
 
   useEffect(() => on('event', (e) => {
-    if (e.kind === 'event_end') { setEnd({ survivors: e.survivors, prizeFish: e.prizeFish, share: e.sharePerSurvivor }); }
+    if (e.kind === 'event_end') { setEnd({ survivors: e.survivors, prizeFish: e.prizeFish }); }
     if (e.kind === 'event_start') { setEnd(null); setKillerName(''); setDismissedDeath(false); }
     if (e.kind === 'kill' && e.victimId === net.selfId) { setKillerName(e.attacker); setDismissedDeath(false); }
     if (e.kind === 'respawn' && e.playerId === net.selfId) {
@@ -275,10 +273,18 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
     }
   }, [me?.spectator, spectateOnly, shareShown]);
 
-  const liveEntries = [...net.players.values()]
-    .filter((p) => !p.spectator)
-    .map((p) => ({ name: p.name, kills: p.kills, dead: p.dead, weight: p.weight, isMe: p.id === net.selfId, bot: p.bot }))
-    .sort((a, b) => Number(!b.dead) - Number(!a.dead) || b.weight - a.weight);
+  // Live payout projection: rank ALIVE fish (kills, then size) and split the
+  // current pool on the poker curve. Dead/eliminated fish drop to the bottom
+  // with no share. Updates every render as kills land and fish die.
+  const inTank = [...net.players.values()].filter((p) => !p.spectator);
+  const aliveRanked = inTank.filter((p) => !p.dead)
+    .sort((a, b) => b.kills - a.kills || b.weight - a.weight);
+  const projShares = payoutSplit(net.prizeFish, aliveRanked.length);
+  const liveEntries = [
+    ...aliveRanked.map((p, i) => ({ name: p.name, kills: p.kills, weight: p.weight, dead: false, isMe: p.id === net.selfId, bot: p.bot, share: projShares[i] })),
+    ...inTank.filter((p) => p.dead).sort((a, b) => b.kills - a.kills)
+      .map((p) => ({ name: p.name, kills: p.kills, weight: p.weight, dead: true, isMe: p.id === net.selfId, bot: p.bot, share: 0 })),
+  ];
 
   const canBite = me && !me.dead && !me.spectator && inRound;
   const biteReady = Date.now() - net.lastBiteSentAt > BITE_COOLDOWN_MS;
@@ -291,22 +297,25 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
       </div>
       {spectateOnly && <SpectatorBanner onExit={onExit} />}
 
-      {/* Live standings */}
-      <div className="absolute top-4 left-4 pointer-events-auto bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg p-3 min-w-[200px]">
+      {/* Live survivors + projected payouts */}
+      <div className="absolute top-4 left-4 pointer-events-auto bg-black/60 backdrop-blur-sm border border-zinc-800 rounded-lg p-3 min-w-[240px]">
         <div className="text-purple-400 text-xs font-bold mb-2 uppercase tracking-wider">
-          {inRound ? '🩸 Survivors' : '🐟 In the Tank'}
+          {inRound ? '🩸 Survivors · live payout' : '🐟 In the Tank'}
         </div>
-        {liveEntries.slice(0, 8).map((e, i) => (
-          <div key={i} className={`flex items-center gap-2 text-xs py-0.5 ${e.dead ? 'opacity-40 line-through' : ''} ${e.isMe ? 'bg-white/10 rounded px-1 -mx-1' : ''}`}>
-            <span className="text-zinc-400 w-4">{i + 1}</span>
-            <span className={`truncate flex-1 ${e.isMe ? 'text-yellow-300 font-bold' : 'text-zinc-200'}`}>
+        {liveEntries.slice(0, 10).map((e, i) => (
+          <div key={i} className={`flex items-center gap-2 text-xs py-0.5 ${e.dead ? 'opacity-40' : ''} ${e.isMe ? 'bg-white/10 rounded px-1 -mx-1' : ''}`}>
+            <span className="w-5 text-center">{e.dead ? '💀' : i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : <span className="text-zinc-500">{i + 1}</span>}</span>
+            <span className={`truncate flex-1 ${e.isMe ? 'text-yellow-300 font-bold' : e.dead ? 'text-zinc-500 line-through' : 'text-zinc-200'}`}>
               {e.name}{e.bot ? ' 🤖' : ''}{e.isMe ? ' (you)' : ''}
             </span>
-            <span className="text-amber-400">{e.weight.toFixed(1)}kg</span>
-            <span className="text-red-400">{e.kills}🗡</span>
+            <span className="text-red-400 w-8 text-right">{e.kills}🗡</span>
+            <span className="text-emerald-300 w-16 text-right">{e.dead ? '—' : fmtFish(e.share)}</span>
           </div>
         ))}
-        {liveEntries.length === 0 && <div className="text-zinc-600 text-xs">No players yet</div>}
+        {liveEntries.length === 0 && <div className="text-zinc-600 text-xs">No fish in the tank yet</div>}
+        {inRound && aliveRanked.length > 0 && (
+          <div className="text-zinc-500 text-[9px] mt-1.5 pt-1.5 border-t border-zinc-700/50">survive to the buzzer to claim your $FISH 🏆</div>
+        )}
       </div>
 
       {/* My stats */}
@@ -504,7 +513,7 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
       )}
 
       {net.phase === 'ended' && end && (
-        <EventEndedOverlay survivors={end.survivors} prizeFish={end.prizeFish} share={end.share} meName={me?.name ?? ''} />
+        <EventEndedOverlay survivors={end.survivors} prizeFish={end.prizeFish} meName={me?.name ?? ''} />
       )}
 
       {showShare && me && !end && (

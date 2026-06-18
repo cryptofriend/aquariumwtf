@@ -10,13 +10,18 @@ import { randomUUID } from 'node:crypto';
 import {
   TANK_HALF, INITIAL_WEIGHT, MIN_WEIGHT, FOOD_WEIGHT, MAX_FOOD, FOOD_SPAWN_MS,
   BITE_COOLDOWN_MS, SPAWN_IMMUNITY_MS, EVENT_DURATION_MS, AGENT_TIMEOUT_MS,
-  ENTRY_COST_TOKENS, prizePoolFish,
+  ENTRY_COST_TOKENS, prizePoolFish, payoutSplit,
   speedFor, eatRadiusFor, biteRangeFor, biteDamage, decayPerSecond,
 } from '../../shared/constants';
 import type { GameEvent, NetFood, NetPlayer, Phase, SnapshotMsg, Standing } from '../../shared/protocol';
 
 function shortWallet(w: string | null): string {
   return w ? `${w.slice(0, 4)}…${w.slice(-4)}` : '';
+}
+
+/** Payout rank: most kills, then biggest, then earliest into the tank. */
+function rankSurvivors(a: Player, b: Player): number {
+  return b.kills - a.kills || b.weight - a.weight || a.joinedAt - b.joinedAt;
 }
 
 export interface Vec3 { x: number; y: number; z: number }
@@ -345,27 +350,36 @@ export class World {
     return this.enter(id, now);
   }
 
-  /** The buzzer: all fish ALIVE in the event split the prize equally. */
+  /**
+   * The buzzer: survivors are ranked (kills, then size) and paid on the
+   * poker-style curve — everyone in the money, the top take the most.
+   */
   private endEvent(now: number) {
     const participants = [...this.players.values()].filter((p) => p.participant);
-    const survivors = participants.filter((p) => !p.dead);
     const prizeFish = prizePoolFish(this.ticketsStaked);
-    const sharePerSurvivor = survivors.length ? Math.floor(prizeFish / survivors.length) : 0;
 
-    const toStanding = (p: Player): Standing => ({
+    // Rank survivors: most kills, then biggest, then earliest in the tank.
+    const survivors = participants
+      .filter((p) => !p.dead)
+      .sort(rankSurvivors);
+    const shares = payoutSplit(prizeFish, survivors.length);
+
+    const toStanding = (p: Player, share?: number): Standing => ({
       name: p.name, weight: round2(p.weight), kills: p.kills,
       alive: !p.dead, bot: p.isBot, wallet: shortWallet(p.wallet),
+      ...(share !== undefined ? { share } : {}),
     });
-    const standings = participants
-      .map(toStanding)
-      .sort((a, b) => Number(b.alive) - Number(a.alive) || b.kills - a.kills || b.weight - a.weight);
 
-    this.hallOfFame = survivors
-      .slice()
-      .sort((a, b) => b.kills - a.kills || b.weight - a.weight)
-      .map((p) => ({ name: p.name, wallet: shortWallet(p.wallet), weight: round2(p.weight), kills: p.kills, share: sharePerSurvivor, at: now }));
+    const rankedSurvivors = survivors.map((p, i) => toStanding(p, shares[i]));
+    const dead = participants.filter((p) => p.dead).sort((a, b) => b.kills - a.kills || b.weight - a.weight);
+    const standings = [...rankedSurvivors, ...dead.map((p) => toStanding(p))];
 
-    this.emit({ kind: 'event_end', survivors: survivors.map(toStanding), standings, prizeFish, sharePerSurvivor });
+    this.hallOfFame = survivors.map((p, i) => ({
+      name: p.name, wallet: shortWallet(p.wallet), weight: round2(p.weight),
+      kills: p.kills, share: shares[i], at: now,
+    }));
+
+    this.emit({ kind: 'event_end', survivors: rankedSurvivors, standings, prizeFish });
   }
 
   private aliveParticipants(): Player[] {

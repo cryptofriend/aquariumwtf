@@ -38,6 +38,8 @@ export interface Standing {
   alive: boolean;
   bot: boolean;
   wallet: string;
+  /** $FISH won (set on survivors in event_end). */
+  share?: number;
 }
 
 export type GameEvent =
@@ -50,10 +52,9 @@ export type GameEvent =
   | { kind: 'event_start'; endsAt: number }
   | {
       kind: 'event_end';
-      survivors: Standing[];      // fish alive at the buzzer (empty = nobody)
+      survivors: Standing[];      // alive at the buzzer, ranked, each with .share
       standings: Standing[];      // full final board
       prizeFish: number;          // total $FISH pool
-      sharePerSurvivor: number;   // prizeFish / survivors (0 if none)
     };
 
 // ─── client → server ───

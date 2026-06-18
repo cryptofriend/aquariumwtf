@@ -324,7 +324,8 @@ setInterval(() => {
     broadcast({ t: 'event', e });
     if (e.kind === 'event_end') {
       void persistRoundResults(e.survivors, Math.round(EVENT_DURATION_MS / 1000));
-      console.log(`[event] ENDED — ${e.survivors.length} survivor(s) split ${e.prizeFish.toLocaleString()} $FISH (${e.sharePerSurvivor.toLocaleString()} each)`);
+      const top = e.survivors[0];
+      console.log(`[event] ENDED — ${e.survivors.length} survivor(s) split ${e.prizeFish.toLocaleString()} $FISH · top: ${top?.name ?? 'none'} ${(top?.share ?? 0).toLocaleString()} $FISH`);
     }
     if (e.kind === 'event_start') {
       console.log(`[event] LIVE — survival begins, ends at ${new Date(e.endsAt).toISOString()}`);
