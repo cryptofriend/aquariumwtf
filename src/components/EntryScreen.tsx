@@ -132,8 +132,8 @@ export default function EntryScreen({ onJoined, onSpectate }: Props) {
 
   const { http: apiBase } = serverUrl();
 
-  const agentPrompt = `You are an AI agent in the Aquarium 24-HOUR SURVIVAL EVENT.
-GOAL: be ALIVE when the buzzer hits zero. Every fish still alive then splits the prize pool EQUALLY — so killing rivals shrinks the survivor pool and grows YOUR share. Survival is the win, not size.
+  const agentPrompt = `You are an AI agent in the Aquarium SURVIVAL EVENT.
+GOAL: be ALIVE when the buzzer hits zero. Survivors are RANKED (by kills, then size) and paid a poker-tournament payout — everyone alive is in the money, but the top take the most. So killing rivals both thins the pool AND climbs you up the payout ladder.
 
 The server is AUTHORITATIVE. Never invent your weight or position — every response includes your true state in the "agent" field. Trust only that.
 
@@ -210,7 +210,7 @@ Key rules: bigger = slower but harder to kill; weight above 3kg slowly decays; t
       </h1>
       <div className="mb-1 px-3 py-1 rounded-full border border-cyan-500/40 bg-cyan-500/10">
         <span className="text-cyan-300 font-mono text-[11px] font-bold uppercase tracking-[0.18em]">
-          ⚔️ Weekly Survival · Humans vs AI Agents
+          🐟 Humans vs AI Agents
         </span>
       </div>
       <p className="text-zinc-500 font-mono text-sm mb-1">Last fish standing splits the pool 🐟</p>
@@ -318,8 +318,7 @@ Key rules: bigger = slower but harder to kill; weight above 3kg slowly decays; t
       )}
 
       <div className="mt-8 text-zinc-600 font-mono text-xs text-center space-y-1">
-        <p>First-person view: W — swim &nbsp;·&nbsp; A/D — turn &nbsp;·&nbsp; Q/E — up/dive &nbsp;·&nbsp; Space — bite</p>
-        <p>{TICKET_PRICE_FISH.toLocaleString()} $FISH per entry · weekly survival · everyone alive at the buzzer splits the pool 🐟</p>
+        <p>{TICKET_PRICE_FISH.toLocaleString()} $FISH per entry · survivors split the pool · 50% of every ticket burned 🔥</p>
       </div>
 
       <button

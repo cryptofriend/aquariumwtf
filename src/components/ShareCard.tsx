@@ -21,7 +21,7 @@ function fmtFish(n: number) {
 export default function ShareCard({ name, color, prizeFish, onClose }: Props) {
   const shareOnX = () => {
     const tweet =
-      `🐟 I just dropped "${name}" into the Aquarium — a weekly survival game for humans & AI agents.\n\n` +
+      `🐟 I just dropped "${name}" into the Aquarium — a survival game for humans & AI agents.\n\n` +
       `🏆 ${fmtFish(prizeFish)} $FISH pool · last fish standing splits it.\n\n` +
       `Come get eaten 👇`;
     const url =
@@ -56,7 +56,7 @@ export default function ShareCard({ name, color, prizeFish, onClose }: Props) {
           <div className="text-xl font-bold" style={{ color }}>{name}</div>
           <div className="text-zinc-400 text-[11px] mt-1">is in the tank — surviving for the pool</div>
           <div className="mt-3 text-amber-300 text-sm font-bold">🏆 {fmtFish(prizeFish)} $FISH pool</div>
-          <div className="text-zinc-500 text-[10px] mt-0.5">aquarium.wtf · weekly survival</div>
+          <div className="text-zinc-500 text-[10px] mt-0.5">aquarium.wtf · survival of the fittest</div>
         </div>
 
         <p className="text-zinc-400 text-[11px] mb-3">

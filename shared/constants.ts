@@ -39,21 +39,27 @@ export const AGENT_TIMEOUT_MS = 10_000;
 
 // ─── $FISH economy ───
 // 1 game ticket = TICKET_PRICE_FISH $FISH sent to the prize-pool wallet,
-// verified on-chain. No ticket → spectator only. Every ticket's $FISH is
-// added to the prize pool on top of the 100M base; survivors split it.
+// verified on-chain. No ticket → spectator only. Of each ticket, half is
+// added to the prize pool (on top of the base) and half is BURNED.
 //
 // ⚠️ PLACEHOLDERS until the $FISH token launches — set FISH_MINT (and confirm
 // FISH_DECIMALS) and ticket purchases go live. Until then, on-chain buys can't
 // verify; gameplay is testable via the server's DEV_ALLOW_NO_WALLET flag.
 export const ENTRY_COST_TOKENS = 1;          // tickets charged per entry / re-entry
-export const TICKET_PRICE_FISH = 21_000;     // $FISH per ticket
+export const TICKET_PRICE_FISH = 100_000;    // $FISH per ticket (full entry cost)
+export const POOL_SHARE_FISH = 50_000;       // of each ticket, added to the prize pool
+export const BURN_SHARE_FISH = TICKET_PRICE_FISH - POOL_SHARE_FISH; // 50k burned per ticket
 export const FISH_DECIMALS = 6;              // TODO: confirm against the real mint
 export const FISH_MINT = 'FISH_MINT_ADDRESS_TBD';
-export const BASE_PRIZE_FISH = 100_000_000;  // 100M $FISH sponsored base prize
+export const BASE_PRIZE_FISH = 50_000_000;   // 50M $FISH sponsored base prize
 export const PRIZE_POOL_WALLET = 'BUZkgjP1QjYd9YJcUNhpFXFvQBPiqwGMaZNBecuGvR4M';
-/** Total prize $FISH = base + every ticket staked into the event. */
+/** Total prize $FISH = base + half of every ticket staked into the event. */
 export function prizePoolFish(ticketsStaked: number): number {
-  return BASE_PRIZE_FISH + ticketsStaked * TICKET_PRICE_FISH;
+  return BASE_PRIZE_FISH + ticketsStaked * POOL_SHARE_FISH;
+}
+/** Total $FISH burned = half of every ticket staked. */
+export function burnedFish(ticketsStaked: number): number {
+  return ticketsStaked * BURN_SHARE_FISH;
 }
 
 /**

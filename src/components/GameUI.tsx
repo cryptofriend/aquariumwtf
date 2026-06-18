@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { TANK_HALF, BITE_COOLDOWN_MS, TICKET_PRICE_FISH, payoutSplit } from '../game/constants';
+import { TANK_HALF, BITE_COOLDOWN_MS, TICKET_PRICE_FISH, BASE_PRIZE_FISH, payoutSplit } from '../game/constants';
 import { biteRequest } from './TankScene';
 import { Move, ArrowUpDown, Bug, Info, X, Smartphone } from 'lucide-react';
 import { useIsMobile } from '../hooks/use-mobile';
@@ -113,6 +113,8 @@ function PrizePoolBanner() {
 
   const fish = net.prizeFish;
   const usd = price !== null ? fish * price : null;
+  // Burn == pool contribution per ticket, so burned so far == pool above base.
+  const burned = Math.max(0, fish - BASE_PRIZE_FISH);
 
   return (
     <div className="bg-black/75 backdrop-blur-sm border-2 border-amber-400/70 rounded-xl px-6 py-2 text-center shadow-lg shadow-amber-900/30 pointer-events-none">
@@ -125,7 +127,9 @@ function PrizePoolBanner() {
           </span>
         )}
       </div>
-      <div className="text-zinc-500 text-[9px]">all survivors split the pool 🐟</div>
+      <div className="text-zinc-500 text-[9px]">
+        survivors split the pool 🐟{burned > 0 && <span className="text-orange-400"> · 🔥 {fmtFish(burned)} $FISH burned</span>}
+      </div>
     </div>
   );
 }
@@ -408,7 +412,7 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
           <div className="mb-3 p-2 rounded-md bg-amber-500/10 border border-amber-500/30">
             <div className="text-amber-300 text-[10px] font-bold uppercase tracking-wider mb-1">🏆 Goal</div>
             <p className="text-zinc-200 text-[11px] leading-snug">
-              One <span className="text-amber-300 font-bold">24-hour survival event</span>. Every fish <span className="text-amber-300 font-bold">still alive at the buzzer splits the prize pool equally</span>.
+              <span className="text-amber-300 font-bold">Survive to the buzzer.</span> Survivors are ranked by kills &amp; size and paid a <span className="text-amber-300 font-bold">poker-style payout</span> — everyone alive cashes, the top take the most.
             </p>
           </div>
 
@@ -416,7 +420,7 @@ export default function GameUI({ spectateOnly = false, onExit = () => {} }: Game
             <div className="text-yellow-300 text-[10px] font-bold uppercase tracking-wider mb-1">🎟 Tickets &amp; prize</div>
             <ul className="text-zinc-300 text-[11px] space-y-1 list-disc list-inside">
               <li>1 ticket = <span className="text-yellow-300">{TICKET_PRICE_FISH.toLocaleString()} $FISH</span>, bought on the entry screen</li>
-              <li>Each ticket's $FISH is <span className="text-amber-300">added to the prize pool</span> (on top of the 100M base)</li>
+              <li>Half of each ticket <span className="text-amber-300">grows the prize pool</span>, half is <span className="text-orange-400">burned 🔥</span></li>
               <li>Died? <span className="text-yellow-300">Re-enter for 1 ticket</span> — as many times as you can afford</li>
               <li>👀 <span className="text-zinc-400">No ticket? Spectate for free</span></li>
             </ul>

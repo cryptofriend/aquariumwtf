@@ -3,7 +3,7 @@ import { World, Player } from './world';
 import {
   INITIAL_WEIGHT, SPAWN_IMMUNITY_MS, BITE_COOLDOWN_MS,
   EVENT_DURATION_MS, AGENT_TIMEOUT_MS, FOOD_WEIGHT,
-  BASE_PRIZE_FISH, TICKET_PRICE_FISH, prizePoolFish,
+  BASE_PRIZE_FISH, POOL_SHARE_FISH, prizePoolFish,
   biteDamage,
 } from '../../shared/constants';
 
@@ -106,11 +106,12 @@ describe('prize pool', () => {
   let world: World;
   beforeEach(() => { world = freshWorld(); });
 
-  it('starts at the 100M base and grows by each staked ticket', () => {
+  it('starts at the base and grows by each staked ticket (half to pool)', () => {
     expect(prizePoolFish(0)).toBe(BASE_PRIZE_FISH);
     joinPlayer(world, 'A');           // +1 ticket
     joinPlayer(world, 'B');           // +1 ticket
-    expect(world.snapshot(LIVE).prizeFish).toBe(BASE_PRIZE_FISH + 2 * TICKET_PRICE_FISH);
+    expect(world.snapshot(LIVE).prizeFish).toBe(prizePoolFish(2));
+    expect(world.snapshot(LIVE).prizeFish).toBe(BASE_PRIZE_FISH + 2 * POOL_SHARE_FISH);
   });
 
   it('counts re-entries toward the pool too', () => {
